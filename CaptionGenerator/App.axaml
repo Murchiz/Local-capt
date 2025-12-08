@@ -1,0 +1,17 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CaptionGenerator.App"
+             xmlns:local="using:CaptionGenerator"
+             xmlns:converters="using:CaptionGenerator.Converters">
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <converters:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

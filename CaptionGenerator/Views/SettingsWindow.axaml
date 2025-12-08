@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="CaptionGenerator.Views.SettingsWindow"
+        xmlns:vm="using:CaptionGenerator.ViewModels"
+        xmlns:models="using:CaptionGenerator.Models"
+        x:DataType="vm:SettingsViewModel"
+        x:Name="SettingsWin"
+        Title="Settings">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
+      <Button Content="Save" Command="{Binding SaveSettingsCommand}"/>
+    </StackPanel>
+    <TabControl>
+      <TabItem Header="API Endpoints">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
+            <Button Content="Add" Margin="5" Command="{Binding AddApiEndpointCommand}"/>
+            <Button Content="Remove" Margin="5" Command="{Binding RemoveApiEndpointCommand}"/>
+          </StackPanel>
+          <ListBox ItemsSource="{Binding ApiEndpoints}" SelectedItem="{Binding SelectedApiEndpoint}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="models:ApiEndpointSetting">
+                <Grid ColumnDefinitions="Auto,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="5">
+                  <TextBlock Text="Name:" Grid.Row="0" Grid.Column="0" FontWeight="Bold"/>
+                  <TextBox Text="{Binding Name}" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Margin="5"/>
+                  <TextBlock Text="Provider:" Grid.Row="1" Grid.Column="0" FontWeight="Bold"/>
+                  <ComboBox ItemsSource="{Binding Source={x:Static vm:SettingsViewModel.Providers}}" SelectedItem="{Binding Provider}" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="5"/>
+                  <TextBlock Text="URL:" Grid.Row="2" Grid.Column="0" FontWeight="Bold"/>
+                  <TextBox Text="{Binding Url}" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Margin="5"/>
+                  <TextBlock Text="Model Identifier:" Grid.Row="3" Grid.Column="0" FontWeight="Bold"/>
+                  <TextBox Text="{Binding ModelIdentifier}" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Margin="5"/>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="Prompt Templates">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
+            <Button Content="Add" Margin="5" Command="{Binding AddPromptTemplateCommand}"/>
+            <Button Content="Remove" Margin="5" Command="{Binding RemovePromptTemplateCommand}"/>
+          </StackPanel>
+          <ListBox ItemsSource="{Binding PromptTemplates}" SelectedItem="{Binding SelectedPromptTemplate}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="models:PromptTemplateSetting">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="5">
+                  <TextBlock Text="Name:" Grid.Row="0" Grid.Column="0" FontWeight="Bold"/>
+                  <TextBox Text="{Binding Name}" Grid.Row="0" Grid.Column="1" Margin="5"/>
+                  <TextBlock Text="Prompt:" Grid.Row="1" Grid.Column="0" FontWeight="Bold"/>
+                  <TextBox Text="{Binding Prompt}" Grid.Row="1" Grid.Column="1" Margin="5" Height="100" TextWrapping="Wrap"/>
+                  <TextBlock Text="Model:" Grid.Row="2" Grid.Column="0" FontWeight="Bold"/>
+                  <ComboBox ItemsSource="{Binding ApiEndpoints}" DisplayMemberBinding="{Binding Name}" SelectedValue="{Binding ModelName}" SelectedValueBinding="{Binding Name}" Grid.Row="2" Grid.Column="1" Margin="5"/>
+                  <TextBlock Text="Output Format:" Grid.Row="3" Grid.Column="0" FontWeight="Bold"/>
+                  <ComboBox ItemsSource="{Binding Source={x:Static vm:SettingsViewModel.OutputFormats}}" SelectedItem="{Binding OutputFormat}" Grid.Row="3" Grid.Column="1" Margin="5"/>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="Advanced">
+        <StackPanel Margin="10" Spacing="10">
+          <CheckBox IsChecked="{Binding EnableAsyncProcessing}"
+                    Content="Enable asynchronous processing (experimental)"/>
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</Window>
