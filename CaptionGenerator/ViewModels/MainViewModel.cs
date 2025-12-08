@@ -11,6 +11,7 @@ using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CaptionGenerator.ApiClients;
 using CaptionGenerator.Models;
 using CaptionGenerator.Services;
 using CaptionGenerator.Views;
@@ -196,10 +197,10 @@ public partial class MainViewModel : ViewModelBase
     {
         return endpoint.Provider switch
         {
-            "Ollama" => new OllamaApiClient(endpoint.Url, endpoint.ModelIdentifier),
-            "LM Studio" => new OpenAiCompatibleApiClient(endpoint.Url, endpoint.ModelIdentifier),
-            "llama.cpp" => new OpenAiCompatibleApiClient(endpoint.Url, endpoint.ModelIdentifier),
-            "Oobabooga" => new OpenAiCompatibleApiClient(endpoint.Url, endpoint.ModelIdentifier),
+            "Ollama" => new ApiClients.OllamaApiClient(endpoint.Url, endpoint.ModelIdentifier),
+            "LM Studio" => new ApiClients.OpenAiCompatibleApiClient(endpoint.Url, endpoint.ModelIdentifier),
+            "llama.cpp" => new ApiClients.OpenAiCompatibleApiClient(endpoint.Url, endpoint.ModelIdentifier),
+            "Oobabooga" => new ApiClients.OpenAiCompatibleApiClient(endpoint.Url, endpoint.ModelIdentifier),
             _ => null
         };
     }
