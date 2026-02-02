@@ -34,7 +34,8 @@
           <Border BorderThickness="2" CornerRadius="5" Padding="5" Margin="5"
                   BorderBrush="{Binding IsProcessing, Converter={StaticResource BoolToBrushConverter}}">
             <StackPanel Spacing="5">
-              <Image Source="{Binding ImagePath}" Width="200" Height="200" Margin="5"/>
+              <!-- ⚡ Bolt Optimization: Use BitmapAssetValueConverter to decode image to 200px width, saving massive memory -->
+              <Image Source="{Binding ImagePath, Converter={StaticResource BitmapAssetValueConverter}}" Width="200" Height="200" Margin="5"/>
               <TextBox Text="{Binding Caption}" IsReadOnly="True" TextWrapping="Wrap" Width="200"/>
             </StackPanel>
           </Border>
