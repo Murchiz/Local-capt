@@ -214,21 +214,6 @@ public partial class MainViewModel : ViewModelBase
 
         if (CreateDataset)
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), "CaptionGeneratorDataset");
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
-            Directory.CreateDirectory(tempDir);
-
-            for (var i = 0; i < ImageCaptions.Count; i++)
-            {
-                var imageCaption = ImageCaptions[i];
-                var newImageName = $"{i:D3}{Path.GetExtension(imageCaption.ImagePath)}";
-                var newImagePath = Path.Combine(tempDir, newImageName);
-                File.Copy(imageCaption.ImagePath, newImagePath);
-
-                var newCaptionPath = Path.Combine(tempDir, $"{i:D3}.txt");
-                await File.WriteAllTextAsync(newCaptionPath, imageCaption.Caption);
-            }
-
             var result = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Save Dataset Archive",
@@ -238,9 +223,43 @@ public partial class MainViewModel : ViewModelBase
 
             if (result is not null)
             {
-                if (File.Exists(result.Path.LocalPath)) File.Delete(result.Path.LocalPath);
-                ZipFile.CreateFromDirectory(tempDir, result.Path.LocalPath);
-                Directory.Delete(tempDir, true);
+                // ⚡ Bolt Optimization: Zip directly to the output stream to avoid redundant I/O and temp files.
+                // This reduces disk I/O by ~50% and uses zero temporary disk space.
+                // We also prompt for the file location BEFORE doing any work.
+                try
+                {
+                    using var zipStream = await result.OpenWriteAsync();
+                    using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create);
+
+                    for (var i = 0; i < ImageCaptions.Count; i++)
+                    {
+                        var imageCaption = ImageCaptions[i];
+
+                        // Add image entry
+                        var extension = Path.GetExtension(imageCaption.ImagePath);
+                        var imageEntry = archive.CreateEntry($"{i:D3}{extension}", CompressionLevel.Fastest);
+                        using (var entryStream = imageEntry.Open())
+                        using (var fileStream = File.OpenRead(imageCaption.ImagePath))
+                        {
+                            await fileStream.CopyToAsync(entryStream);
+                        }
+
+                        // Add caption entry
+                        var captionEntry = archive.CreateEntry($"{i:D3}.txt", CompressionLevel.Fastest);
+                        using (var entryStream = captionEntry.Open())
+                        using (var writer = new StreamWriter(entryStream))
+                        {
+                            await writer.WriteAsync(imageCaption.Caption);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (MainWindow is not null)
+                    {
+                        await ErrorDialog.ShowAsync(MainWindow, $"Error saving dataset: {ex.Message}");
+                    }
+                }
             }
         }
         else
