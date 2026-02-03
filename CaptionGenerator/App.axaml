@@ -9,6 +9,7 @@
 
     <Application.Resources>
         <converters:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+        <converters:BitmapAssetValueConverter x:Key="BitmapAssetValueConverter"/>
     </Application.Resources>
 
     <Application.Styles>
