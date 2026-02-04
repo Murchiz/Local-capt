@@ -25,6 +25,11 @@ public partial class MainViewModel : ViewModelBase
     private CancellationTokenSource _cancellationTokenSource = new();
     private readonly SemaphoreSlim _errorDialogSemaphore = new(1, 1);
 
+    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".bmp"
+    };
+
     [ObservableProperty]
     private ObservableCollection<PromptTemplateSetting> _promptTemplates = new();
 
@@ -80,14 +85,13 @@ public partial class MainViewModel : ViewModelBase
         {
             var folder = result[0];
             var imageFiles = new List<ImageCaptionViewModel>();
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp" };
 
             await foreach (var item in folder.GetItemsAsync())
             {
                 if (item is IStorageFile file)
                 {
-                    var extension = Path.GetExtension(file.Name).ToLowerInvariant();
-                    if (allowedExtensions.Contains(extension))
+                    var extension = Path.GetExtension(file.Name);
+                    if (AllowedExtensions.Contains(extension))
                     {
                         imageFiles.Add(new ImageCaptionViewModel(new ImageCaption { ImagePath = file.Path.LocalPath }));
                     }
@@ -123,74 +127,85 @@ public partial class MainViewModel : ViewModelBase
 
         var prompt = SelectedPromptTemplate.Prompt.Replace("{output_format}", SelectedPromptTemplate.OutputFormat);
 
-        if (_settings.EnableAsyncProcessing)
+        try
         {
-            var semaphore = new SemaphoreSlim(4);
-            var tasks = ImageCaptions.Select(async imageCaption =>
+            if (_settings.EnableAsyncProcessing)
             {
-                if (_cancellationTokenSource.IsCancellationRequested) return;
+                // ⚡ Bolt Optimization: Use Parallel.ForEachAsync for better task management and reduced overhead.
+                // This avoids creating all Tasks upfront and provides a cleaner implementation of concurrency limiting.
+                var parallelOptions = new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = 4,
+                    CancellationToken = _cancellationTokenSource.Token
+                };
 
-                await semaphore.WaitAsync(_cancellationTokenSource.Token);
-                imageCaption.IsProcessing = true;
-                try
+                await Parallel.ForEachAsync(ImageCaptions, parallelOptions, async (imageCaption, ct) =>
                 {
-                    var imageData = await File.ReadAllBytesAsync(imageCaption.ImagePath, _cancellationTokenSource.Token);
-                    imageCaption.Caption = await client.GenerateCaptionAsync(imageData, prompt);
-                }
-                catch (Exception ex)
-                {
-                    await _errorDialogSemaphore.WaitAsync(_cancellationTokenSource.Token);
+                    imageCaption.IsProcessing = true;
                     try
                     {
-                        if (_cancellationTokenSource.IsCancellationRequested) return;
-                        var result = await ErrorDialog.ShowAsync(MainWindow, ex.Message);
-                        if (result == ErrorDialogResult.Stop)
+                        var imageData = await File.ReadAllBytesAsync(imageCaption.ImagePath, ct);
+                        imageCaption.Caption = await client.GenerateCaptionAsync(imageData, prompt);
+                    }
+                    catch (Exception ex)
+                    {
+                        await _errorDialogSemaphore.WaitAsync(ct);
+                        try
                         {
-                            _cancellationTokenSource.Cancel();
+                            if (ct.IsCancellationRequested) return;
+                            var result = await ErrorDialog.ShowAsync(MainWindow, ex.Message);
+                            if (result == ErrorDialogResult.Stop)
+                            {
+                                _cancellationTokenSource.Cancel();
+                            }
+                        }
+                        finally
+                        {
+                            _errorDialogSemaphore.Release();
                         }
                     }
                     finally
                     {
-                        _errorDialogSemaphore.Release();
+                        imageCaption.IsProcessing = false;
                     }
-                }
-                finally
-                {
-                    imageCaption.IsProcessing = false;
-                    semaphore.Release();
-                }
-            });
-            await Task.WhenAll(tasks);
-        }
-        else
-        {
-            foreach (var imageCaption in ImageCaptions)
+                });
+            }
+            else
             {
-                if (_cancellationTokenSource.IsCancellationRequested) break;
+                foreach (var imageCaption in ImageCaptions)
+                {
+                    if (_cancellationTokenSource.IsCancellationRequested) break;
 
-                imageCaption.IsProcessing = true;
-                try
-                {
-                    var imageData = await File.ReadAllBytesAsync(imageCaption.ImagePath, _cancellationTokenSource.Token);
-                    imageCaption.Caption = await client.GenerateCaptionAsync(imageData, prompt);
-                }
-                catch (Exception ex)
-                {
-                    var result = await ErrorDialog.ShowAsync(MainWindow, ex.Message);
-                    if (result == ErrorDialogResult.Stop)
+                    imageCaption.IsProcessing = true;
+                    try
                     {
-                        _cancellationTokenSource.Cancel();
-                        break;
+                        var imageData = await File.ReadAllBytesAsync(imageCaption.ImagePath, _cancellationTokenSource.Token);
+                        imageCaption.Caption = await client.GenerateCaptionAsync(imageData, prompt);
                     }
-                }
-                finally
-                {
-                    imageCaption.IsProcessing = false;
+                    catch (Exception ex)
+                    {
+                        var result = await ErrorDialog.ShowAsync(MainWindow, ex.Message);
+                        if (result == ErrorDialogResult.Stop)
+                        {
+                            _cancellationTokenSource.Cancel();
+                            break;
+                        }
+                    }
+                    finally
+                    {
+                        imageCaption.IsProcessing = false;
+                    }
                 }
             }
         }
-
-        IsBusy = false;
+        catch (OperationCanceledException)
+        {
+            // Ignore cancellation
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private IVisionLanguageModelClient? CreateApiClient(ApiEndpointSetting endpoint)
@@ -264,11 +279,13 @@ public partial class MainViewModel : ViewModelBase
         }
         else
         {
-            foreach (var imageCaption in ImageCaptions)
+            // ⚡ Bolt Optimization: Parallelize saving individual text files to improve I/O throughput.
+            // On modern SSDs and network storage, this significantly reduces the time to save large sets of captions.
+            await Parallel.ForEachAsync(ImageCaptions, async (imageCaption, ct) =>
             {
                 var captionPath = Path.ChangeExtension(imageCaption.ImagePath, ".txt");
-                await File.WriteAllTextAsync(captionPath, imageCaption.Caption);
-            }
+                await File.WriteAllTextAsync(captionPath, imageCaption.Caption, ct);
+            });
         }
 
         IsSaving = false;
