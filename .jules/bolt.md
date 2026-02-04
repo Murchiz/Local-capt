@@ -5,3 +5,7 @@
 ## 2025-01-24 - [Dataset Generation I/O Optimization]
 **Learning:** Creating archives by copying files to a temporary directory before zipping (`Read -> Write (Temp) -> Read (Temp) -> Write (Zip)`) is highly inefficient for large datasets. Streaming files directly into `ZipArchive` entries (`Read -> Write (Zip)`) reduces Disk I/O by ~50% and eliminates temporary disk space requirements.
 **Action:** Stream files directly from source to target archive whenever possible, avoiding intermediate temporary files.
+
+## 2025-01-24 - [Batch I/O and Processing Parallelization]
+**Learning:** Sequential file operations (like saving individual caption files) and manual Task management (like `Select` + `Task.WhenAll` with `SemaphoreSlim`) can be improved using `Parallel.ForEachAsync`. This provides better I/O throughput for small files on SSDs and more memory-efficient task management by not creating all Task objects upfront.
+**Action:** Use `Parallel.ForEachAsync` for batch I/O and concurrent API processing to improve throughput and reduce task management overhead.
