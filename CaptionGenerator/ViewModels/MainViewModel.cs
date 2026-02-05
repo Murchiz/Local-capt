@@ -25,6 +25,7 @@ public partial class MainViewModel : ViewModelBase
     private CancellationTokenSource _cancellationTokenSource = new();
     private readonly SemaphoreSlim _errorDialogSemaphore = new(1, 1);
 
+    // ⚡ Bolt Optimization: Use a HashSet for fast lookup.
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".bmp"
@@ -81,22 +82,27 @@ public partial class MainViewModel : ViewModelBase
             AllowMultiple = false
         });
 
-        if (result.Any())
+        if (result is [var folder, ..])
         {
-            var folder = result[0];
-            var imageFiles = new List<ImageCaptionViewModel>();
-
-            await foreach (var item in folder.GetItemsAsync())
+            // ⚡ Bolt Optimization: Offload folder scanning to a background thread and use Span-based extension checking.
+            // This prevents UI freezes during large folder discovery and reduces per-file allocations.
+            var imageFiles = await Task.Run(async () =>
             {
-                if (item is IStorageFile file)
+                var files = new List<ImageCaptionViewModel>();
+                await foreach (var item in folder.GetItemsAsync())
                 {
-                    var extension = Path.GetExtension(file.Name);
-                    if (AllowedExtensions.Contains(extension))
+                    if (item is IStorageFile file)
                     {
-                        imageFiles.Add(new ImageCaptionViewModel(new ImageCaption { ImagePath = file.Path.LocalPath }));
+                        var fileName = file.Name.AsSpan();
+                        var extension = Path.GetExtension(fileName);
+                        if (IsAllowedExtension(extension))
+                        {
+                            files.Add(new ImageCaptionViewModel(new ImageCaption { ImagePath = file.Path.LocalPath }));
+                        }
                     }
                 }
-            }
+                return files;
+            });
             ImageCaptions = new ObservableCollection<ImageCaptionViewModel>(imageFiles);
         }
     }
@@ -252,7 +258,9 @@ public partial class MainViewModel : ViewModelBase
 
                         // Add image entry
                         var extension = Path.GetExtension(imageCaption.ImagePath);
-                        var imageEntry = archive.CreateEntry($"{i:D3}{extension}", CompressionLevel.Fastest);
+                        // ⚡ Bolt Optimization: Use NoCompression for images as they are already compressed (JPEG/PNG).
+                        // This saves CPU cycles and speeds up archive creation significantly for large datasets.
+                        var imageEntry = archive.CreateEntry($"{i:D3}{extension}", CompressionLevel.NoCompression);
                         using (var entryStream = imageEntry.Open())
                         using (var fileStream = File.OpenRead(imageCaption.ImagePath))
                         {
@@ -260,7 +268,8 @@ public partial class MainViewModel : ViewModelBase
                         }
 
                         // Add caption entry
-                        var captionEntry = archive.CreateEntry($"{i:D3}.txt", CompressionLevel.Fastest);
+                        // ⚡ Bolt Optimization: Use Optimal compression for text files to save space with minimal overhead.
+                        var captionEntry = archive.CreateEntry($"{i:D3}.txt", CompressionLevel.Optimal);
                         using (var entryStream = captionEntry.Open())
                         using (var writer = new StreamWriter(entryStream))
                         {
@@ -289,6 +298,16 @@ public partial class MainViewModel : ViewModelBase
         }
 
         IsSaving = false;
+    }
+
+    private static bool IsAllowedExtension(ReadOnlySpan<char> extension)
+    {
+        // ⚡ Bolt Optimization: Use allocation-free span comparison for extension checking.
+        foreach (var allowed in AllowedExtensions)
+        {
+            if (extension.Equals(allowed, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 
     [RelayCommand]
