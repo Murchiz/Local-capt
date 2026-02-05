@@ -13,6 +13,12 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
     private readonly string _baseUrl;
     private readonly string _model;
 
+    // ⚡ Bolt Optimization: Pre-configure JsonSerializerOptions to avoid repeated discovery/allocation.
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = null
+    };
+
     public OpenAiCompatibleApiClient(string baseUrl, string model)
     {
         _baseUrl = baseUrl;
@@ -46,13 +52,13 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
 
         var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
         {
-            Content = JsonContent.Create(requestData)
+            Content = JsonContent.Create(requestData, options: _jsonOptions)
         };
 
         var response = await HttpClientContainer.Client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        var jsonResponse = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var jsonResponse = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
         return jsonResponse.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? string.Empty;
     }
 
