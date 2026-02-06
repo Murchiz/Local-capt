@@ -25,12 +25,6 @@ public partial class MainViewModel : ViewModelBase
     private CancellationTokenSource _cancellationTokenSource = new();
     private readonly SemaphoreSlim _errorDialogSemaphore = new(1, 1);
 
-    // ⚡ Bolt Optimization: Use a HashSet for fast lookup.
-    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".jpg", ".jpeg", ".png", ".bmp"
-    };
-
     [ObservableProperty]
     private ObservableCollection<PromptTemplateSetting> _promptTemplates = new();
 
@@ -302,12 +296,13 @@ public partial class MainViewModel : ViewModelBase
 
     private static bool IsAllowedExtension(ReadOnlySpan<char> extension)
     {
-        // ⚡ Bolt Optimization: Use allocation-free span comparison for extension checking.
-        foreach (var allowed in AllowedExtensions)
-        {
-            if (extension.Equals(allowed, StringComparison.OrdinalIgnoreCase)) return true;
-        }
-        return false;
+        // ⚡ Bolt Optimization: Use direct comparison for a small set of extensions.
+        // For 4 extensions, direct comparison is faster than HashSet enumeration
+        // and avoids any overhead of the collection itself.
+        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase);
     }
 
     [RelayCommand]
