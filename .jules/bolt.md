@@ -13,3 +13,7 @@
 ## 2025-01-24 - [JSON Serialization and ZIP Compression]
 **Learning:** JsonSerializerOptions instances should be cached and reused to avoid reflection overhead on every API call. Additionally, compressing already-compressed files like JPEGs in a ZIP archive with 'Fastest' or 'Optimal' levels is a waste of CPU; 'NoCompression' is significantly faster for large datasets.
 **Action:** Always use static readonly JsonSerializerOptions in API clients and NoCompression for media files in archives.
+
+## 2025-01-24 - [Efficient Large Binary Data Handling in JSON APIs]
+**Learning:** Manual base64 conversion of large images before JSON serialization is inefficient. `System.Text.Json` can serialize `byte[]` directly to base64 into its internal buffer, avoiding a large intermediate string allocation. For cases where a data URI is required (e.g., OpenAI compatible APIs), using `string.Create` with `Convert.TryToBase64Chars` builds the final string in a single allocation, further reducing memory pressure.
+**Action:** Pass `byte[]` directly to `JsonSerializer` when possible, or use `string.Create` for complex URI construction with binary data to minimize RAM usage.

@@ -27,13 +27,15 @@ public class OllamaApiClient : IVisionLanguageModelClient
 
     public async Task<string> GenerateCaptionAsync(byte[] imageData, string prompt)
     {
-        var base64Image = Convert.ToBase64String(imageData);
-
+        // ⚡ Bolt Optimization: Pass the byte[] directly to the anonymous object.
+        // System.Text.Json will encode the byte[] as a base64 string during serialization.
+        // This avoids allocating a large intermediate string via Convert.ToBase64String,
+        // saving ~1.33x the image size in RAM per concurrent request.
         var requestData = new
         {
             model = _model,
             prompt = prompt,
-            images = new[] { base64Image },
+            images = new[] { imageData },
             stream = false
         };
 

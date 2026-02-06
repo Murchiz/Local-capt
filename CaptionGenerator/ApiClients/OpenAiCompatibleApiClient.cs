@@ -27,9 +27,8 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
 
     public async Task<string> GenerateCaptionAsync(byte[] imageData, string prompt)
     {
-        var base64Image = Convert.ToBase64String(imageData);
         var mimeType = GetMimeType(imageData);
-        var imageUrl = $"data:{mimeType};base64,{base64Image}";
+        var imageUrl = CreateDataUri(imageData, mimeType);
 
         var requestData = new
         {
@@ -62,17 +61,52 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
         return jsonResponse.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? string.Empty;
     }
 
-    private string GetMimeType(byte[] imageData)
+    /// <summary>
+    /// ⚡ Bolt Optimization: Build the data URI in a single allocation using string.Create.
+    /// This avoids the intermediate large base64 string allocation from Convert.ToBase64String.
+    /// </summary>
+    private static string CreateDataUri(byte[] imageData, string mimeType)
     {
-        if (imageData.Length > 4 && imageData[0] == 0x89 && imageData[1] == 0x50 && imageData[2] == 0x4E && imageData[3] == 0x47)
+        int base64Length = (imageData.Length + 2) / 3 * 4;
+        const string prefix = "data:";
+        const string base64Marker = ";base64,";
+
+        int totalLength = prefix.Length + mimeType.Length + base64Marker.Length + base64Length;
+
+        return string.Create(totalLength, (imageData, mimeType), (span, state) =>
+        {
+            "data:".AsSpan().CopyTo(span);
+            span = span.Slice(5);
+
+            state.mimeType.AsSpan().CopyTo(span);
+            span = span.Slice(state.mimeType.Length);
+
+            ";base64,".AsSpan().CopyTo(span);
+            span = span.Slice(8);
+
+            if (!Convert.TryToBase64Chars(state.imageData, span, out _))
+            {
+                throw new InvalidOperationException("Failed to encode base64 data");
+            }
+        });
+    }
+
+    private static string GetMimeType(ReadOnlySpan<byte> imageData)
+    {
+        // ⚡ Bolt Optimization: Use Span-based StartsWith for zero-allocation header checking.
+        ReadOnlySpan<byte> pngHeader = [0x89, 0x50, 0x4E, 0x47];
+        ReadOnlySpan<byte> jpegHeader = [0xFF, 0xD8];
+        ReadOnlySpan<byte> bmpHeader = [0x42, 0x4D];
+
+        if (imageData.StartsWith(pngHeader))
         {
             return "image/png";
         }
-        if (imageData.Length > 2 && imageData[0] == 0xFF && imageData[1] == 0xD8)
+        if (imageData.StartsWith(jpegHeader))
         {
             return "image/jpeg";
         }
-        if (imageData.Length > 2 && imageData[0] == 0x42 && imageData[1] == 0x4D)
+        if (imageData.StartsWith(bmpHeader))
         {
             return "image/bmp";
         }
