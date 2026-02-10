@@ -91,7 +91,11 @@ public partial class MainViewModel : ViewModelBase
                         var extension = Path.GetExtension(fileName);
                         if (IsAllowedExtension(extension))
                         {
-                            files.Add(new ImageCaptionViewModel(new ImageCaption { ImagePath = file.Path.LocalPath }));
+                            files.Add(new ImageCaptionViewModel(new ImageCaption
+                            {
+                                ImagePath = file.Path.LocalPath,
+                                Extension = extension.ToString()
+                            }));
                         }
                     }
                 }
@@ -249,21 +253,37 @@ public partial class MainViewModel : ViewModelBase
                     for (var i = 0; i < ImageCaptions.Count; i++)
                     {
                         var imageCaption = ImageCaptions[i];
+                        var index = i;
+                        int indexLength = index < 1000 ? 3 : (int)Math.Floor(Math.Log10(index)) + 1;
+
+                        // ⚡ Bolt Optimization: Build the entry name in a single allocation using string.Create.
+                        // This avoids multiple intermediate strings and interpolation overhead.
+                        var imageEntryName = string.Create(indexLength + imageCaption.Extension.Length, (index, imageCaption.Extension, indexLength), (span, state) =>
+                        {
+                            state.index.TryFormat(span[..state.indexLength], out _, "D3");
+                            state.Extension.AsSpan().CopyTo(span[state.indexLength..]);
+                        });
 
                         // Add image entry
-                        var extension = Path.GetExtension(imageCaption.ImagePath);
                         // ⚡ Bolt Optimization: Use NoCompression for images as they are already compressed (JPEG/PNG).
                         // This saves CPU cycles and speeds up archive creation significantly for large datasets.
-                        var imageEntry = archive.CreateEntry($"{i:D3}{extension}", CompressionLevel.NoCompression);
+                        var imageEntry = archive.CreateEntry(imageEntryName, CompressionLevel.NoCompression);
                         using (var entryStream = imageEntry.Open())
                         using (var fileStream = File.OpenRead(imageCaption.ImagePath))
                         {
-                            await fileStream.CopyToAsync(entryStream);
+                            // ⚡ Bolt Optimization: Use a larger buffer (128KB) for CopyToAsync to improve I/O throughput.
+                            await fileStream.CopyToAsync(entryStream, 131072);
                         }
+
+                        var captionEntryName = string.Create(indexLength + 4, (index, indexLength), (span, state) =>
+                        {
+                            state.index.TryFormat(span[..state.indexLength], out _, "D3");
+                            ".txt".AsSpan().CopyTo(span[state.indexLength..]);
+                        });
 
                         // Add caption entry
                         // ⚡ Bolt Optimization: Use Optimal compression for text files to save space with minimal overhead.
-                        var captionEntry = archive.CreateEntry($"{i:D3}.txt", CompressionLevel.Optimal);
+                        var captionEntry = archive.CreateEntry(captionEntryName, CompressionLevel.Optimal);
                         using (var entryStream = captionEntry.Open())
                         using (var writer = new StreamWriter(entryStream))
                         {
@@ -296,13 +316,22 @@ public partial class MainViewModel : ViewModelBase
 
     private static bool IsAllowedExtension(ReadOnlySpan<char> extension)
     {
-        // ⚡ Bolt Optimization: Use direct comparison for a small set of extensions.
-        // For 4 extensions, direct comparison is faster than HashSet enumeration
-        // and avoids any overhead of the collection itself.
-        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase);
+        // ⚡ Bolt Optimization: Use a fast length check and a switch expression for efficient extension validation.
+        // This avoids multiple full string comparisons and is significantly faster when scanning folders with many non-image files.
+        if (extension.Length is < 4 or > 5 || extension[0] != '.') return false;
+
+        return extension.Length switch
+        {
+            4 => extension[1] switch
+            {
+                'j' or 'J' => extension.Slice(2).Equals("pg", StringComparison.OrdinalIgnoreCase),
+                'p' or 'P' => extension.Slice(2).Equals("ng", StringComparison.OrdinalIgnoreCase),
+                'b' or 'B' => extension.Slice(2).Equals("mp", StringComparison.OrdinalIgnoreCase),
+                _ => false
+            },
+            5 => extension.Slice(1).Equals("jpeg", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
     }
 
     [RelayCommand]

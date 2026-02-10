@@ -9,4 +9,7 @@ public partial class ImageCaption : ObservableObject
 
     [ObservableProperty]
     private string _caption = string.Empty;
+
+    [ObservableProperty]
+    private string _extension = string.Empty;
 }

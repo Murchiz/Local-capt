@@ -26,4 +26,10 @@ public partial class ImageCaptionViewModel : ObservableObject
         get => _imageCaption.Caption;
         set => SetProperty(_imageCaption.Caption, value, _imageCaption, (c, v) => c.Caption = v);
     }
+
+    public string Extension
+    {
+        get => _imageCaption.Extension;
+        set => SetProperty(_imageCaption.Extension, value, _imageCaption, (c, v) => c.Extension = v);
+    }
 }

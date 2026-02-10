@@ -17,3 +17,7 @@
 ## 2025-01-24 - [Efficient Large Binary Data Handling in JSON APIs]
 **Learning:** Manual base64 conversion of large images before JSON serialization is inefficient. `System.Text.Json` can serialize `byte[]` directly to base64 into its internal buffer, avoiding a large intermediate string allocation. For cases where a data URI is required (e.g., OpenAI compatible APIs), using `string.Create` with `Convert.TryToBase64Chars` builds the final string in a single allocation, further reducing memory pressure.
 **Action:** Pass `byte[]` directly to `JsonSerializer` when possible, or use `string.Create` for complex URI construction with binary data to minimize RAM usage.
+
+## 2025-01-24 - [Zero-Allocation String Formatting and Metadata Caching]
+**Learning:** Even with modern C# interpolation, creating strings in a loop (like entry names in a ZIP archive) still incurs allocation and formatting overhead. Using `string.Create` with `TryFormat` and `Span<char>` provides zero-allocation formatting for the template part of the string. Additionally, caching metadata like file extensions in the Model during discovery avoids redundant `Path` parsing and string allocations in later processing stages.
+**Action:** Use `string.Create` for hot-path string construction and cache derived file properties in models if they are needed more than once.
