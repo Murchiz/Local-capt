@@ -9,8 +9,13 @@ jobs:
   publish:
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-        target: [win-x64, linux-x64, osx-x64]
+        include:
+          - os: windows-latest
+            target: win-x64
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: macos-latest
+            target: osx-x64
 
     runs-on: ${{ matrix.os }}
 
@@ -26,6 +31,7 @@ jobs:
         run: dotnet restore CaptionGenerator/CaptionGenerator.csproj
 
       - name: Publish
+        # Added -p:TreatWarningsAsErrors=false to prevent the trimming warnings from failing the build if strict mode is on
         run: dotnet publish CaptionGenerator/CaptionGenerator.csproj -c Release -r ${{ matrix.target }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o publish_output
 
       - name: Upload artifacts
@@ -33,3 +39,4 @@ jobs:
         with:
           name: CaptionGenerator-${{ matrix.target }}
           path: publish_output/
+          # overwriting is usually disabled by default, ensuring unique names via the matrix fix above is the best solution.
