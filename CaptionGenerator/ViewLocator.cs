@@ -2,7 +2,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using CaptionGenerator.ViewModels;
-using CaptionGenerator.Views; // Ensure you have this namespace
+using CaptionGenerator.Views; // <--- THIS WAS MISSING
 
 namespace CaptionGenerator;
 
@@ -13,16 +13,10 @@ public class ViewLocator : IDataTemplate
         if (data is null)
             return new TextBlock { Text = "Not Found: data is null" };
 
-        // FIX: Explicitly map ViewModels to Views using a switch expression.
-        // This ensures the compiler knows these Views are used and keeps them.
         return data switch
         {
             MainViewModel vm => new MainView { DataContext = vm },
             SettingsViewModel vm => new SettingsView { DataContext = vm },
-            
-            // Add other ViewModels here as you create them:
-            // AboutViewModel vm => new AboutView { DataContext = vm },
-
             _ => new TextBlock { Text = "Not Found: " + data.GetType().Name }
         };
     }
