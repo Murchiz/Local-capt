@@ -13,43 +13,23 @@ jobs:
         target: [win-x64, linux-x64, osx-x64]
 
     runs-on: ${{ matrix.os }}
-    name: Build on ${{ matrix.os }} / ${{ matrix.target }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET (10.x)
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore dependencies
+      - name: Restore
         run: dotnet restore CaptionGenerator/CaptionGenerator.csproj
 
       - name: Publish
-        run: |
-          dotnet publish CaptionGenerator/CaptionGenerator.csproj \
-            -c Release \
-            -r ${{ matrix.target }} \
-            --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:PublishTrimmed=true \
-            -o publish_output
+        run: dotnet publish CaptionGenerator/CaptionGenerator.csproj -c Release -r ${{ matrix.target }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o publish_output
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: CaptionGenerator-${{ matrix.target }}
-          path: publish_output/        --runtime ${{ matrix.kind.target }} \
-        --self-contained true \
-        -p:PublishSingleFile=true \
-        --output ./publish_output
-
-    # This uploads the files so you can download them from the Actions tab
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: CaptionGenerator-${{ matrix.kind.target }}
-        path: ./publish_output/
-
+          path: publish_output/
