@@ -29,8 +29,12 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _enableAsyncProcessing;
 
-    public static List<string> Providers => new() { "Ollama", "LM Studio", "llama.cpp", "Oobabooga" };
-    public static List<string> OutputFormats => new() { "Text", "Markdown" };
+    // ⚡ Bolt Optimization: Cache static lists to avoid repeated allocations when binding to UI elements.
+    private static readonly List<string> _providers = ["Ollama", "LM Studio", "llama.cpp", "Oobabooga"];
+    private static readonly List<string> _outputFormats = ["Text", "Markdown"];
+
+    public static List<string> Providers => _providers;
+    public static List<string> OutputFormats => _outputFormats;
 
     public SettingsViewModel(SettingsService settingsService)
     {
@@ -53,9 +57,13 @@ public partial class SettingsViewModel : ViewModelBase
         }
         ApiEndpoints = _settings.ApiEndpoints;
         PromptTemplates = _settings.PromptTemplates;
+
+        // ⚡ Bolt Optimization: Convert ApiEndpoints to a list once and reuse it for all templates
+        // to avoid repeated allocations and iterations during initialization.
+        var apiEndpointsList = ApiEndpoints.ToList();
         foreach (var template in PromptTemplates)
         {
-            template.ApiEndpoints = ApiEndpoints.ToList();
+            template.ApiEndpoints = apiEndpointsList;
         }
         EnableAsyncProcessing = _settings.EnableAsyncProcessing;
     }
