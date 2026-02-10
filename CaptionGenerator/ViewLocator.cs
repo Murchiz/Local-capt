@@ -2,7 +2,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using CaptionGenerator.ViewModels;
-using CaptionGenerator.Views; // <--- THIS WAS MISSING
+using CaptionGenerator.Views; // <--- FIX: This was missing!
 
 namespace CaptionGenerator;
 
