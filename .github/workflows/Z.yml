@@ -1,4 +1,4 @@
-name: Publish Avalonia App
+name: Publish Avalonia .NET 10 App
 
 on:
   push:
@@ -6,35 +6,42 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  publish:
     strategy:
       matrix:
-        # This configuration runs the build 3 times in parallel
-        kind: 
-          - { os: windows-latest, target: win-x64 }
-          - { os: ubuntu-latest,  target: linux-x64 }
-          - { os: macos-latest,   target: osx-x64 }
-    
-    runs-on: ${{ matrix.kind.os }}
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        target: [win-x64, linux-x64, osx-x64]
+
+    runs-on: ${{ matrix.os }}
+    name: Build on ${{ matrix.os }} / ${{ matrix.target }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x' # Ensure this matches your .csproj
+      - name: Setup .NET (10.x)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
 
-    - name: Restore dependencies
-      run: dotnet restore CaptionGenerator.csproj
+      - name: Restore dependencies
+        run: dotnet restore CaptionGenerator/CaptionGenerator.csproj
 
-    # This command creates the single-file executable
-    - name: Publish
-      run: |
-        dotnet publish CaptionGenerator.csproj \
-        --configuration Release \
-        --runtime ${{ matrix.kind.target }} \
+      - name: Publish
+        run: |
+          dotnet publish CaptionGenerator/CaptionGenerator.csproj \
+            -c Release \
+            -r ${{ matrix.target }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishTrimmed=true \
+            -o publish_output
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CaptionGenerator-${{ matrix.target }}
+          path: publish_output/        --runtime ${{ matrix.kind.target }} \
         --self-contained true \
         -p:PublishSingleFile=true \
         --output ./publish_output
