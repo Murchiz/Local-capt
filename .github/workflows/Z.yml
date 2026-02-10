@@ -1,0 +1,48 @@
+name: Publish Avalonia App
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        # This configuration runs the build 3 times in parallel
+        kind: 
+          - { os: windows-latest, target: win-x64 }
+          - { os: ubuntu-latest,  target: linux-x64 }
+          - { os: macos-latest,   target: osx-x64 }
+    
+    runs-on: ${{ matrix.kind.os }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x' # Ensure this matches your .csproj
+
+    - name: Restore dependencies
+      run: dotnet restore CaptionGenerator.csproj
+
+    # This command creates the single-file executable
+    - name: Publish
+      run: |
+        dotnet publish CaptionGenerator.csproj \
+        --configuration Release \
+        --runtime ${{ matrix.kind.target }} \
+        --self-contained true \
+        -p:PublishSingleFile=true \
+        --output ./publish_output
+
+    # This uploads the files so you can download them from the Actions tab
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: CaptionGenerator-${{ matrix.kind.target }}
+        path: ./publish_output/
+
