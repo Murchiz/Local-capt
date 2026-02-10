@@ -5,9 +5,10 @@ using CaptionGenerator.ApiClients;
 
 namespace CaptionGenerator;
 
+// Register all types used in JSON serialization here
 [JsonSerializable(typeof(Settings))]
 [JsonSerializable(typeof(OllamaRequest))]
-[JsonSerializable(typeof(OpenAiRequest))] // <--- ADD THIS
+[JsonSerializable(typeof(OpenAiRequest))] // <--- IMPORTANT
 [JsonSerializable(typeof(JsonElement))]
 public partial class AppJsonContext : JsonSerializerContext
 {
