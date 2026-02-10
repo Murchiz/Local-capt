@@ -1,23 +1,19 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using CaptionGenerator.Services;
 
 namespace CaptionGenerator.ApiClients;
 
+// Define the request structure explicitly so the Trimmer can see it.
+public record OllamaRequest(string model, string prompt, byte[][] images, bool stream);
+
 public class OllamaApiClient : IVisionLanguageModelClient
 {
     private readonly string _baseUrl;
     private readonly string _model;
-
-    // ⚡ Bolt Optimization: Pre-configure JsonSerializerOptions to avoid repeated discovery/allocation.
-    private static readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        PropertyNamingPolicy = null // Ollama uses exact names in its API
-    };
 
     public OllamaApiClient(string baseUrl, string model)
     {
@@ -27,27 +23,33 @@ public class OllamaApiClient : IVisionLanguageModelClient
 
     public async Task<string> GenerateCaptionAsync(byte[] imageData, string prompt)
     {
-        // ⚡ Bolt Optimization: Pass the byte[] directly to the anonymous object.
-        // System.Text.Json will encode the byte[] as a base64 string during serialization.
-        // This avoids allocating a large intermediate string via Convert.ToBase64String,
-        // saving ~1.33x the image size in RAM per concurrent request.
-        var requestData = new
-        {
-            model = _model,
-            prompt = prompt,
-            images = new[] { imageData },
-            stream = false
-        };
+        // Use the concrete class instead of an anonymous object
+        var requestData = new OllamaRequest(
+            _model,
+            prompt,
+            new[] { imageData },
+            false
+        );
 
         var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/api/generate")
         {
-            Content = JsonContent.Create(requestData, options: _jsonOptions)
+            // FIX: Pass the specific TypeInfo from our Context
+            Content = JsonContent.Create(requestData, AppJsonContext.Default.OllamaRequest)
         };
 
         var response = await HttpClientContainer.Client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        var jsonResponse = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        return jsonResponse.GetProperty("response").GetString() ?? string.Empty;
+        // FIX: Use the Context for deserialization
+        var jsonResponse = await response.Content.ReadFromJsonAsync(AppJsonContext.Default.JsonElement);
+        
+        // Handle case where response might be null/empty safely
+        if (jsonResponse.ValueKind == JsonValueKind.Object && 
+            jsonResponse.TryGetProperty("response", out var responseText))
+        {
+            return responseText.GetString() ?? string.Empty;
+        }
+
+        return string.Empty;
     }
 }
