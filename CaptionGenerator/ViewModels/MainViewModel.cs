@@ -89,12 +89,13 @@ public partial class MainViewModel : ViewModelBase
                     {
                         var fileName = file.Name.AsSpan();
                         var extension = Path.GetExtension(fileName);
-                        if (IsAllowedExtension(extension))
+                        var canonicalExtension = GetCanonicalExtension(extension);
+                        if (canonicalExtension != null)
                         {
                             files.Add(new ImageCaptionViewModel(new ImageCaption
                             {
                                 ImagePath = file.Path.LocalPath,
-                                Extension = extension.ToString()
+                                Extension = canonicalExtension
                             }));
                         }
                     }
@@ -314,23 +315,24 @@ public partial class MainViewModel : ViewModelBase
         IsSaving = false;
     }
 
-    private static bool IsAllowedExtension(ReadOnlySpan<char> extension)
+    private static string? GetCanonicalExtension(ReadOnlySpan<char> extension)
     {
-        // ⚡ Bolt Optimization: Use a fast length check and a switch expression for efficient extension validation.
-        // This avoids multiple full string comparisons and is significantly faster when scanning folders with many non-image files.
-        if (extension.Length is < 4 or > 5 || extension[0] != '.') return false;
+        // ⚡ Bolt Optimization: Use canonical extension interning to reduce memory allocations.
+        // This replaces thousands of identical extension strings with single static instances.
+        // It also performs fast, allocation-free validation of allowed image types.
+        if (extension.Length is < 4 or > 5 || extension[0] != '.') return null;
 
         return extension.Length switch
         {
             4 => extension[1] switch
             {
-                'j' or 'J' => extension.Slice(2).Equals("pg", StringComparison.OrdinalIgnoreCase),
-                'p' or 'P' => extension.Slice(2).Equals("ng", StringComparison.OrdinalIgnoreCase),
-                'b' or 'B' => extension.Slice(2).Equals("mp", StringComparison.OrdinalIgnoreCase),
-                _ => false
+                'j' or 'J' when extension.Slice(2).Equals("pg", StringComparison.OrdinalIgnoreCase) => ".jpg",
+                'p' or 'P' when extension.Slice(2).Equals("ng", StringComparison.OrdinalIgnoreCase) => ".png",
+                'b' or 'B' when extension.Slice(2).Equals("mp", StringComparison.OrdinalIgnoreCase) => ".bmp",
+                _ => null
             },
-            5 => extension.Slice(1).Equals("jpeg", StringComparison.OrdinalIgnoreCase),
-            _ => false
+            5 when extension.Slice(1).Equals("jpeg", StringComparison.OrdinalIgnoreCase) => ".jpeg",
+            _ => null
         };
     }
 

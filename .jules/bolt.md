@@ -25,3 +25,7 @@
 ## 2025-02-12 - [Source-Generated JSON Context Maintenance]
 **Learning:** When using .NET source generators for JSON serialization (`JsonSerializerContext`), ALL nested types used in serialization must be explicitly registered with `[JsonSerializable]`. Missing nested types can lead to "type not found" errors or runtime failures during reflection-free execution. Additionally, keeping the context in a central service file while referencing it from API clients requires careful namespace management.
 **Action:** Always register the full hierarchy of request/response models in `AppJsonContext.cs` and ensure proper `using` directives in clients.
+
+## 2025-02-14 - [Memory Optimization for Large Object Collections]
+**Learning:** In applications handling thousands of items (like image lists), making every item model an `ObservableObject` adds significant memory overhead (events, delegates, base class state). Keeping the Model as a POCO and wrapping it in an `ObservableObject` ViewModel is more efficient. Additionally, calling `.ToString()` on repeated values (like file extensions) during discovery creates thousands of identical string objects. Canonical interning (returning static literals for common values) eliminates these redundant allocations.
+**Action:** Use POCO models for large collections and implement canonical string interning for repeated metadata during data discovery.
