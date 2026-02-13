@@ -17,7 +17,7 @@ public class ViewLocator : IDataTemplate
         {
             // FIX: Map MainViewModel to MainWindow (not MainView)
             MainViewModel vm => new MainWindow { DataContext = vm },
-            
+
             // FIX: Map SettingsViewModel to SettingsWindow (not SettingsView)
             SettingsViewModel vm => new SettingsWindow { DataContext = vm },
 

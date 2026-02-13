@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
 using CaptionGenerator.Services;
+using CaptionGenerator;
 
 namespace CaptionGenerator.ApiClients;
 
@@ -42,9 +43,9 @@ public class OllamaApiClient : IVisionLanguageModelClient
 
         // FIX: Use the Context for deserialization
         var jsonResponse = await response.Content.ReadFromJsonAsync(AppJsonContext.Default.JsonElement);
-        
+
         // Handle case where response might be null/empty safely
-        if (jsonResponse.ValueKind == JsonValueKind.Object && 
+        if (jsonResponse.ValueKind == JsonValueKind.Object &&
             jsonResponse.TryGetProperty("response", out var responseText))
         {
             return responseText.GetString() ?? string.Empty;

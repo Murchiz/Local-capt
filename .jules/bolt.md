@@ -21,3 +21,7 @@
 ## 2025-01-24 - [Zero-Allocation String Formatting and Metadata Caching]
 **Learning:** Even with modern C# interpolation, creating strings in a loop (like entry names in a ZIP archive) still incurs allocation and formatting overhead. Using `string.Create` with `TryFormat` and `Span<char>` provides zero-allocation formatting for the template part of the string. Additionally, caching metadata like file extensions in the Model during discovery avoids redundant `Path` parsing and string allocations in later processing stages.
 **Action:** Use `string.Create` for hot-path string construction and cache derived file properties in models if they are needed more than once.
+
+## 2025-02-12 - [Source-Generated JSON Context Maintenance]
+**Learning:** When using .NET source generators for JSON serialization (`JsonSerializerContext`), ALL nested types used in serialization must be explicitly registered with `[JsonSerializable]`. Missing nested types can lead to "type not found" errors or runtime failures during reflection-free execution. Additionally, keeping the context in a central service file while referencing it from API clients requires careful namespace management.
+**Action:** Always register the full hierarchy of request/response models in `AppJsonContext.cs` and ensure proper `using` directives in clients.
