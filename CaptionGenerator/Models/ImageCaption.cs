@@ -1,15 +1,8 @@
-using CommunityToolkit.Mvvm.ComponentModel;
-
 namespace CaptionGenerator.Models;
 
-public partial class ImageCaption : ObservableObject
+public class ImageCaption
 {
-    [ObservableProperty]
-    private string _imagePath = string.Empty;
-
-    [ObservableProperty]
-    private string _caption = string.Empty;
-
-    [ObservableProperty]
-    private string _extension = string.Empty;
+    public string ImagePath { get; set; } = string.Empty;
+    public string Caption { get; set; } = string.Empty;
+    public string Extension { get; set; } = string.Empty;
 }
