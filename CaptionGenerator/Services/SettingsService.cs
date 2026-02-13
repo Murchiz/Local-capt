@@ -51,7 +51,7 @@ public class SettingsService
     {
         var filePath = GetSettingsFilePath();
         using var stream = File.Create(filePath);
-        
+
         // FIX: Pass the AppJsonContext.Default.Settings explicitly
         await JsonSerializer.SerializeAsync(stream, settings, AppJsonContext.Default.Settings);
     }
