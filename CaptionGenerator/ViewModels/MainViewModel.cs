@@ -251,17 +251,23 @@ public partial class MainViewModel : ViewModelBase
                     using var zipStream = await result.OpenWriteAsync();
                     using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create);
 
+                    // ⚡ Bolt Optimization: Pre-calculate indexLength outside the loop to avoid redundant math operations for every file.
+                    // This also ensures consistent zero-padding for all files in the dataset.
+                    int totalCount = ImageCaptions.Count;
+                    int maxIndex = totalCount > 0 ? totalCount - 1 : 0;
+                    int indexLength = Math.Max(3, maxIndex < 1 ? 1 : (int)Math.Floor(Math.Log10(maxIndex)) + 1);
+                    string format = "D" + indexLength;
+
                     for (var i = 0; i < ImageCaptions.Count; i++)
                     {
                         var imageCaption = ImageCaptions[i];
                         var index = i;
-                        int indexLength = index < 1000 ? 3 : (int)Math.Floor(Math.Log10(index)) + 1;
 
                         // ⚡ Bolt Optimization: Build the entry name in a single allocation using string.Create.
                         // This avoids multiple intermediate strings and interpolation overhead.
-                        var imageEntryName = string.Create(indexLength + imageCaption.Extension.Length, (index, imageCaption.Extension, indexLength), (span, state) =>
+                        var imageEntryName = string.Create(indexLength + imageCaption.Extension.Length, (index, imageCaption.Extension, indexLength, format), (span, state) =>
                         {
-                            state.index.TryFormat(span[..state.indexLength], out _, "D3");
+                            state.index.TryFormat(span[..state.indexLength], out _, state.format);
                             state.Extension.AsSpan().CopyTo(span[state.indexLength..]);
                         });
 
@@ -276,9 +282,9 @@ public partial class MainViewModel : ViewModelBase
                             await fileStream.CopyToAsync(entryStream, 131072);
                         }
 
-                        var captionEntryName = string.Create(indexLength + 4, (index, indexLength), (span, state) =>
+                        var captionEntryName = string.Create(indexLength + 4, (index, indexLength, format), (span, state) =>
                         {
-                            state.index.TryFormat(span[..state.indexLength], out _, "D3");
+                            state.index.TryFormat(span[..state.indexLength], out _, state.format);
                             ".txt".AsSpan().CopyTo(span[state.indexLength..]);
                         });
 

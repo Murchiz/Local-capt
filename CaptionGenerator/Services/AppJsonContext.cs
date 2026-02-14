@@ -12,6 +12,10 @@ namespace CaptionGenerator;
 [JsonSerializable(typeof(OpenAiMessage))]
 [JsonSerializable(typeof(OpenAiContent))]
 [JsonSerializable(typeof(OpenAiImageUrl))]
+[JsonSerializable(typeof(OllamaResponse))]
+[JsonSerializable(typeof(OpenAiResponse))]
+[JsonSerializable(typeof(OpenAiChoice))]
+[JsonSerializable(typeof(OpenAiResponseMessage))]
 [JsonSerializable(typeof(JsonElement))]
 public partial class AppJsonContext : JsonSerializerContext
 {

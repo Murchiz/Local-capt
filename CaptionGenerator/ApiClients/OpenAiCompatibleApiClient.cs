@@ -13,15 +13,27 @@ public record OpenAiMessage(string role, OpenAiContent[] content);
 public record OpenAiContent(string type, string? text = null, OpenAiImageUrl? image_url = null);
 public record OpenAiImageUrl(string url);
 
+// Response records
+public record OpenAiResponse(OpenAiChoice[] choices);
+public record OpenAiChoice(OpenAiResponseMessage message);
+public record OpenAiResponseMessage(string content);
+
 public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
 {
-    private readonly string _baseUrl;
     private readonly string _model;
+    private readonly Uri _completionsUri;
+
+    // ⚡ Bolt Optimization: Pre-calculate common Data URI prefixes to avoid string allocations for every image.
+    private const string JpegPrefix = "data:image/jpeg;base64,";
+    private const string PngPrefix = "data:image/png;base64,";
+    private const string GifPrefix = "data:image/gif;base64,";
+    private const string BmpPrefix = "data:image/bmp;base64,";
 
     public OpenAiCompatibleApiClient(string baseUrl, string model)
     {
-        _baseUrl = baseUrl;
         _model = model;
+        // ⚡ Bolt Optimization: Cache the Uri object to avoid repeated string formatting and parsing for every call.
+        _completionsUri = new Uri($"{baseUrl}/v1/chat/completions");
     }
 
     public async Task<string> GenerateCaptionAsync(byte[] imageData, string prompt)
@@ -42,7 +54,7 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
             ]
         );
 
-        var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
+        var request = new HttpRequestMessage(HttpMethod.Post, _completionsUri)
         {
             Content = JsonContent.Create(requestData, AppJsonContext.Default.OpenAiRequest)
         };
@@ -50,19 +62,12 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
         var response = await HttpClientContainer.Client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        var jsonResponse = await response.Content.ReadFromJsonAsync(AppJsonContext.Default.JsonElement);
+        // ⚡ Bolt Optimization: Use typed response deserialization to eliminate string-based property lookups and reduce memory overhead.
+        var openAiResponse = await response.Content.ReadFromJsonAsync(AppJsonContext.Default.OpenAiResponse);
 
-        if (jsonResponse.ValueKind == JsonValueKind.Object &&
-            jsonResponse.TryGetProperty("choices", out var choices) &&
-            choices.ValueKind == JsonValueKind.Array &&
-            choices.GetArrayLength() > 0)
+        if (openAiResponse?.choices is [var choice, ..] && choice.message != null)
         {
-            var firstChoice = choices[0];
-            if (firstChoice.TryGetProperty("message", out var message) &&
-                message.TryGetProperty("content", out var content))
-            {
-                return content.GetString() ?? string.Empty;
-            }
+            return choice.message.content;
         }
 
         return string.Empty;
@@ -97,8 +102,16 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
 
     private static string ConstructDataUri(string mimeType, byte[] imageData)
     {
-        // ⚡ Bolt Optimization: Construct data URI (data:{mimeType};base64,{base64}) in a single allocation.
-        string prefix = $"data:{mimeType};base64,";
+        // ⚡ Bolt Optimization: Use pre-calculated prefixes for common image types.
+        string prefix = mimeType switch
+        {
+            "image/jpeg" => JpegPrefix,
+            "image/png" => PngPrefix,
+            "image/gif" => GifPrefix,
+            "image/bmp" => BmpPrefix,
+            _ => $"data:{mimeType};base64,"
+        };
+
         int base64Length = (int)(((long)imageData.Length + 2) / 3 * 4);
 
         return string.Create(prefix.Length + base64Length, (prefix, imageData), (span, state) =>

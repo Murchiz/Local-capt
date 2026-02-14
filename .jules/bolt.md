@@ -29,3 +29,7 @@
 ## 2025-02-14 - [Memory Optimization for Large Object Collections]
 **Learning:** In applications handling thousands of items (like image lists), making every item model an `ObservableObject` adds significant memory overhead (events, delegates, base class state). Keeping the Model as a POCO and wrapping it in an `ObservableObject` ViewModel is more efficient. Additionally, calling `.ToString()` on repeated values (like file extensions) during discovery creates thousands of identical string objects. Canonical interning (returning static literals for common values) eliminates these redundant allocations.
 **Action:** Use POCO models for large collections and implement canonical string interning for repeated metadata during data discovery.
+
+## 2025-05-15 - [API Client and Data Export Optimizations]
+**Learning:** Using `JsonElement` for API response parsing is flexible but inefficient due to string-based property lookups and DOM overhead. Typed `record` models with source-generated `JsonSerializerContext` provide faster, AOT-friendly deserialization. Additionally, caching `Uri` objects and pre-calculating loop-invariant strings (like format strings or Data URI prefixes) significantly reduces allocations in high-frequency paths.
+**Action:** Always prefer typed response models for APIs and hoist string construction/formatting out of loops whenever the result is invariant.
