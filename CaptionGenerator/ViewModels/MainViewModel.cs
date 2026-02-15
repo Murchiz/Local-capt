@@ -249,7 +249,10 @@ public partial class MainViewModel : ViewModelBase
                 try
                 {
                     using var zipStream = await result.OpenWriteAsync();
-                    using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create);
+                    // ⚡ Bolt Optimization: Wrap the output stream in a BufferedStream to improve write performance.
+                    // This reduces the number of small write operations to the underlying file stream, especially beneficial for archives.
+                    using var bufferedStream = new BufferedStream(zipStream, 131072);
+                    using var archive = new ZipArchive(bufferedStream, ZipArchiveMode.Create);
 
                     // ⚡ Bolt Optimization: Pre-calculate indexLength outside the loop to avoid redundant math operations for every file.
                     // This also ensures consistent zero-padding for all files in the dataset.

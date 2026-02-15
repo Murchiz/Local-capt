@@ -33,3 +33,7 @@
 ## 2025-05-15 - [API Client and Data Export Optimizations]
 **Learning:** Using `JsonElement` for API response parsing is flexible but inefficient due to string-based property lookups and DOM overhead. Typed `record` models with source-generated `JsonSerializerContext` provide faster, AOT-friendly deserialization. Additionally, caching `Uri` objects and pre-calculating loop-invariant strings (like format strings or Data URI prefixes) significantly reduces allocations in high-frequency paths.
 **Action:** Always prefer typed response models for APIs and hoist string construction/formatting out of loops whenever the result is invariant.
+
+## 2025-05-20 - [32-bit Signature Detection and Stream Buffering]
+**Learning:** Performing multiple 8-bit comparisons for file signature detection is less efficient than a single 32-bit comparison using `BinaryPrimitives.ReadUInt32BigEndian`. Additionally, `ZipArchive` creates many small write operations during metadata generation; wrapping the output stream in a `BufferedStream` with a large buffer (e.g., 128KB) significantly reduces syscall overhead.
+**Action:** Use 32-bit signature checks for headers and always wrap high-frequency/small-write I/O streams in a `BufferedStream`.

@@ -1,6 +1,7 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Buffers.Binary;
 using System.Text.Json;
 using System.Threading.Tasks;
 using CaptionGenerator.Services;
@@ -75,14 +76,13 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
 
     private static string GetMimeType(ReadOnlySpan<byte> data)
     {
-        // ⚡ Bolt Optimization: Zero-allocation file signature detection using manual byte checks.
-        // This is faster and avoids issues with Span.StartsWith overloads in some environments.
+        // ⚡ Bolt Optimization: Zero-allocation file signature detection using 32-bit signature checks.
+        // This performs a single 32-bit comparison instead of multiple 8-bit checks, reducing CPU cycles.
         if (data.Length >= 4)
         {
-            // PNG: 89 50 4E 47
-            if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) return "image/png";
-            // GIF: 47 49 46 38
-            if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38) return "image/gif";
+            uint header = BinaryPrimitives.ReadUInt32BigEndian(data);
+            if (header == 0x89504E47) return "image/png"; // PNG
+            if (header == 0x47494638) return "image/gif"; // GIF8
         }
 
         if (data.Length >= 3)
