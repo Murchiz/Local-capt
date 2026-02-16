@@ -37,3 +37,7 @@
 ## 2025-05-20 - [32-bit Signature Detection and Stream Buffering]
 **Learning:** Performing multiple 8-bit comparisons for file signature detection is less efficient than a single 32-bit comparison using `BinaryPrimitives.ReadUInt32BigEndian`. Additionally, `ZipArchive` creates many small write operations during metadata generation; wrapping the output stream in a `BufferedStream` with a large buffer (e.g., 128KB) significantly reduces syscall overhead.
 **Action:** Use 32-bit signature checks for headers and always wrap high-frequency/small-write I/O streams in a `BufferedStream`.
+
+## 2025-06-15 - [Sequential I/O and StreamWriter Allocation]
+**Learning:** For high-throughput file reading (like dataset zipping), specifying `FileOptions.SequentialScan` and `FileOptions.Asynchronous` in `FileStream` improves performance by hinting read-ahead to the OS. Furthermore, using `StreamWriter` in a tight loop for small string writes to zip entries adds unnecessary object allocation and buffering overhead; direct byte writing with `Encoding.UTF8.GetBytes` is more efficient.
+**Action:** Use `FileOptions.SequentialScan` for sequential reads and avoid `StreamWriter` for frequent small writes to streams.
