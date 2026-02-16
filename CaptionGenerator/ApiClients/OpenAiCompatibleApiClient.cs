@@ -83,11 +83,13 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
             uint header = BinaryPrimitives.ReadUInt32BigEndian(data);
             if (header == 0x89504E47) return "image/png"; // PNG
             if (header == 0x47494638) return "image/gif"; // GIF8
+            // ⚡ Bolt Optimization: Use 32-bit signature check with mask for JPEG to reduce branch instructions for the most common format.
+            if ((header & 0xFFFFFF00) == 0xFFD8FF00) return "image/jpeg";
         }
 
         if (data.Length >= 3)
         {
-            // JPEG: FF D8 FF
+            // JPEG: FF D8 FF (fallback for very small buffers)
             if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) return "image/jpeg";
         }
 

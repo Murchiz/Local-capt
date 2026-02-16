@@ -279,9 +279,10 @@ public partial class MainViewModel : ViewModelBase
                         // This saves CPU cycles and speeds up archive creation significantly for large datasets.
                         var imageEntry = archive.CreateEntry(imageEntryName, CompressionLevel.NoCompression);
                         using (var entryStream = imageEntry.Open())
-                        using (var fileStream = File.OpenRead(imageCaption.ImagePath))
+                        // ⚡ Bolt Optimization: Use FileStream with SequentialScan and Asynchronous options to improve read throughput.
+                        // Standardizing on a 128KB buffer size aligns with our output stream buffering for optimal performance.
+                        using (var fileStream = new FileStream(imageCaption.ImagePath, FileMode.Open, FileAccess.Read, FileShare.Read, 131072, FileOptions.Asynchronous | FileOptions.SequentialScan))
                         {
-                            // ⚡ Bolt Optimization: Use a larger buffer (128KB) for CopyToAsync to improve I/O throughput.
                             await fileStream.CopyToAsync(entryStream, 131072);
                         }
 
@@ -295,9 +296,11 @@ public partial class MainViewModel : ViewModelBase
                         // ⚡ Bolt Optimization: Use Optimal compression for text files to save space with minimal overhead.
                         var captionEntry = archive.CreateEntry(captionEntryName, CompressionLevel.Optimal);
                         using (var entryStream = captionEntry.Open())
-                        using (var writer = new StreamWriter(entryStream))
                         {
-                            await writer.WriteAsync(imageCaption.Caption);
+                            // ⚡ Bolt Optimization: Avoid StreamWriter allocation and use direct byte writing for caption strings.
+                            // This reduces allocations and improves performance when creating large datasets.
+                            byte[] captionBytes = System.Text.Encoding.UTF8.GetBytes(imageCaption.Caption);
+                            await entryStream.WriteAsync(captionBytes);
                         }
                     }
                 }
