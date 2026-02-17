@@ -41,3 +41,7 @@
 ## 2025-06-15 - [Sequential I/O and StreamWriter Allocation]
 **Learning:** For high-throughput file reading (like dataset zipping), specifying `FileOptions.SequentialScan` and `FileOptions.Asynchronous` in `FileStream` improves performance by hinting read-ahead to the OS. Furthermore, using `StreamWriter` in a tight loop for small string writes to zip entries adds unnecessary object allocation and buffering overhead; direct byte writing with `Encoding.UTF8.GetBytes` is more efficient.
 **Action:** Use `FileOptions.SequentialScan` for sequential reads and avoid `StreamWriter` for frequent small writes to streams.
+
+## 2025-07-20 - [Zero-Allocation Caption Writing with ArrayPool]
+**Learning:** Even when avoiding `StreamWriter`, calling `Encoding.UTF8.GetBytes(string)` still allocates a new `byte[]` for every call. In high-frequency loops (like exporting thousands of captions to a ZIP archive), these allocations add up and increase GC pressure. Using `ArrayPool<byte>.Shared.Rent` combined with the `Span`-based `Encoding.UTF8.GetBytes` overload eliminates these redundant allocations.
+**Action:** Use `ArrayPool<byte>` for string-to-byte conversions in high-frequency loops to achieve zero-allocation data processing.

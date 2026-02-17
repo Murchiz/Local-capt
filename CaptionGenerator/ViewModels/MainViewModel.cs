@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -109,7 +110,9 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private async Task GenerateCaptions()
     {
-        if (SelectedPromptTemplate is null || !ImageCaptions.Any() || MainWindow is null) return;
+        // ⚡ Bolt Optimization: Cache ImageCaptions to avoid repeated property access in loops.
+        var imageCaptions = ImageCaptions;
+        if (SelectedPromptTemplate is null || imageCaptions.Count == 0 || MainWindow is null) return;
 
         IsBusy = true;
         _cancellationTokenSource = new CancellationTokenSource();
@@ -144,7 +147,7 @@ public partial class MainViewModel : ViewModelBase
                     CancellationToken = _cancellationTokenSource.Token
                 };
 
-                await Parallel.ForEachAsync(ImageCaptions, parallelOptions, async (imageCaption, ct) =>
+                await Parallel.ForEachAsync(imageCaptions, parallelOptions, async (imageCaption, ct) =>
                 {
                     imageCaption.IsProcessing = true;
                     try
@@ -177,7 +180,7 @@ public partial class MainViewModel : ViewModelBase
             }
             else
             {
-                foreach (var imageCaption in ImageCaptions)
+                foreach (var imageCaption in imageCaptions)
                 {
                     if (_cancellationTokenSource.IsCancellationRequested) break;
 
@@ -228,7 +231,9 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveCaptions()
     {
-        if (!ImageCaptions.Any() || StorageProvider is null) return;
+        // ⚡ Bolt Optimization: Cache ImageCaptions to avoid repeated property access in loops.
+        var imageCaptions = ImageCaptions;
+        if (imageCaptions.Count == 0 || StorageProvider is null) return;
 
         IsSaving = true;
 
@@ -256,14 +261,14 @@ public partial class MainViewModel : ViewModelBase
 
                     // ⚡ Bolt Optimization: Pre-calculate indexLength outside the loop to avoid redundant math operations for every file.
                     // This also ensures consistent zero-padding for all files in the dataset.
-                    int totalCount = ImageCaptions.Count;
+                    int totalCount = imageCaptions.Count;
                     int maxIndex = totalCount > 0 ? totalCount - 1 : 0;
                     int indexLength = Math.Max(3, maxIndex < 1 ? 1 : (int)Math.Floor(Math.Log10(maxIndex)) + 1);
                     string format = "D" + indexLength;
 
-                    for (var i = 0; i < ImageCaptions.Count; i++)
+                    for (var i = 0; i < imageCaptions.Count; i++)
                     {
-                        var imageCaption = ImageCaptions[i];
+                        var imageCaption = imageCaptions[i];
                         var index = i;
 
                         // ⚡ Bolt Optimization: Build the entry name in a single allocation using string.Create.
@@ -297,10 +302,20 @@ public partial class MainViewModel : ViewModelBase
                         var captionEntry = archive.CreateEntry(captionEntryName, CompressionLevel.Optimal);
                         using (var entryStream = captionEntry.Open())
                         {
-                            // ⚡ Bolt Optimization: Avoid StreamWriter allocation and use direct byte writing for caption strings.
-                            // This reduces allocations and improves performance when creating large datasets.
-                            byte[] captionBytes = System.Text.Encoding.UTF8.GetBytes(imageCaption.Caption);
-                            await entryStream.WriteAsync(captionBytes);
+                            // ⚡ Bolt Optimization: Use ArrayPool to avoid byte[] allocations for every caption.
+                            // This reduces memory pressure and GC overhead during large dataset creation.
+                            var captionSpan = imageCaption.Caption.AsSpan();
+                            int byteCount = System.Text.Encoding.UTF8.GetByteCount(captionSpan);
+                            byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(byteCount);
+                            try
+                            {
+                                int written = System.Text.Encoding.UTF8.GetBytes(captionSpan, rentedBuffer);
+                                await entryStream.WriteAsync(rentedBuffer.AsMemory(0, written));
+                            }
+                            finally
+                            {
+                                ArrayPool<byte>.Shared.Return(rentedBuffer);
+                            }
                         }
                     }
                 }
@@ -317,7 +332,7 @@ public partial class MainViewModel : ViewModelBase
         {
             // ⚡ Bolt Optimization: Parallelize saving individual text files to improve I/O throughput.
             // On modern SSDs and network storage, this significantly reduces the time to save large sets of captions.
-            await Parallel.ForEachAsync(ImageCaptions, async (imageCaption, ct) =>
+            await Parallel.ForEachAsync(imageCaptions, async (imageCaption, ct) =>
             {
                 var captionPath = Path.ChangeExtension(imageCaption.ImagePath, ".txt");
                 await File.WriteAllTextAsync(captionPath, imageCaption.Caption, ct);
