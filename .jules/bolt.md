@@ -45,3 +45,7 @@
 ## 2025-07-20 - [Zero-Allocation Caption Writing with ArrayPool]
 **Learning:** Even when avoiding `StreamWriter`, calling `Encoding.UTF8.GetBytes(string)` still allocates a new `byte[]` for every call. In high-frequency loops (like exporting thousands of captions to a ZIP archive), these allocations add up and increase GC pressure. Using `ArrayPool<byte>.Shared.Rent` combined with the `Span`-based `Encoding.UTF8.GetBytes` overload eliminates these redundant allocations.
 **Action:** Use `ArrayPool<byte>` for string-to-byte conversions in high-frequency loops to achieve zero-allocation data processing.
+
+## 2025-08-15 - [Collection Materialization and Compression Tuning]
+**Learning:** Iterating over an `ObservableCollection` using an indexer or enumerator in a hot loop (like dataset export) incurs virtual call overhead. Materializing the collection to an array (`.ToArray()`) provides a stable snapshot and faster access. Additionally, for very small text files (captions), `CompressionLevel.Optimal` is CPU-heavy with negligible space benefit compared to `CompressionLevel.Fastest`.
+**Action:** Always materialize UI collections to arrays before batch processing and use `Fastest` compression for small text metadata in archives.
