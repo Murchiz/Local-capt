@@ -110,9 +110,11 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private async Task GenerateCaptions()
     {
-        // ⚡ Bolt Optimization: Cache ImageCaptions to avoid repeated property access in loops.
-        var imageCaptions = ImageCaptions;
-        if (SelectedPromptTemplate is null || imageCaptions.Count == 0 || MainWindow is null) return;
+        // ⚡ Bolt Optimization: Materialize ImageCaptions to an array for faster iteration and better partitioning in Parallel.ForEachAsync.
+        // This avoids ObservableCollection's virtual indexer/enumerator overhead in a hot loop and provides a stable snapshot.
+        var imageCaptions = ImageCaptions.ToArray();
+        int totalCount = imageCaptions.Length;
+        if (SelectedPromptTemplate is null || totalCount == 0 || MainWindow is null) return;
 
         IsBusy = true;
         _cancellationTokenSource = new CancellationTokenSource();
@@ -231,9 +233,11 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveCaptions()
     {
-        // ⚡ Bolt Optimization: Cache ImageCaptions to avoid repeated property access in loops.
-        var imageCaptions = ImageCaptions;
-        if (imageCaptions.Count == 0 || StorageProvider is null) return;
+        // ⚡ Bolt Optimization: Materialize ImageCaptions to an array for faster iteration and indexing.
+        // This avoids ObservableCollection's virtual indexer/enumerator overhead in a hot loop and provides a stable snapshot.
+        var imageCaptions = ImageCaptions.ToArray();
+        int totalCount = imageCaptions.Length;
+        if (totalCount == 0 || StorageProvider is null) return;
 
         IsSaving = true;
 
@@ -261,12 +265,11 @@ public partial class MainViewModel : ViewModelBase
 
                     // ⚡ Bolt Optimization: Pre-calculate indexLength outside the loop to avoid redundant math operations for every file.
                     // This also ensures consistent zero-padding for all files in the dataset.
-                    int totalCount = imageCaptions.Count;
                     int maxIndex = totalCount > 0 ? totalCount - 1 : 0;
                     int indexLength = Math.Max(3, maxIndex < 1 ? 1 : (int)Math.Floor(Math.Log10(maxIndex)) + 1);
                     string format = "D" + indexLength;
 
-                    for (var i = 0; i < imageCaptions.Count; i++)
+                    for (var i = 0; i < totalCount; i++)
                     {
                         var imageCaption = imageCaptions[i];
                         var index = i;
@@ -298,8 +301,9 @@ public partial class MainViewModel : ViewModelBase
                         });
 
                         // Add caption entry
-                        // ⚡ Bolt Optimization: Use Optimal compression for text files to save space with minimal overhead.
-                        var captionEntry = archive.CreateEntry(captionEntryName, CompressionLevel.Optimal);
+                        // ⚡ Bolt Optimization: Use Fastest compression for text files.
+                        // For typical short captions, the space saving of 'Optimal' is negligible, but 'Fastest' reduces CPU overhead.
+                        var captionEntry = archive.CreateEntry(captionEntryName, CompressionLevel.Fastest);
                         using (var entryStream = captionEntry.Open())
                         {
                             // ⚡ Bolt Optimization: Use ArrayPool to avoid byte[] allocations for every caption.
