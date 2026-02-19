@@ -339,7 +339,23 @@ public partial class MainViewModel : ViewModelBase
             await Parallel.ForEachAsync(imageCaptions, async (imageCaption, ct) =>
             {
                 var captionPath = Path.ChangeExtension(imageCaption.ImagePath, ".txt");
-                await File.WriteAllTextAsync(captionPath, imageCaption.Caption, ct);
+
+                // ⚡ Bolt Optimization: Use ArrayPool to avoid byte[] allocations for every caption.
+                // This reduces memory pressure and GC overhead during large export operations.
+                var captionSpan = imageCaption.Caption.AsSpan();
+                int maxByteCount = System.Text.Encoding.UTF8.GetMaxByteCount(captionSpan.Length);
+                byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
+
+                try
+                {
+                    int written = System.Text.Encoding.UTF8.GetBytes(captionSpan, rentedBuffer);
+                    // ⚡ Bolt Optimization: Use File.WriteAllBytesAsync for efficient asynchronous writing of the encoded caption.
+                    await File.WriteAllBytesAsync(captionPath, rentedBuffer.AsMemory(0, written), ct);
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(rentedBuffer);
+                }
             });
         }
 
