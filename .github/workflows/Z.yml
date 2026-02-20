@@ -2,10 +2,16 @@ name: Publish Avalonia .NET 10 App
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
+    inputs:
+      include_pdb:
+        description: 'Include debug symbols (.pdb files)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   publish:
@@ -29,16 +35,64 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Determine debug symbols inclusion
+        id: config
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "include_pdb=${{ inputs.include_pdb }}" >> $GITHUB_OUTPUT
+          else
+            echo "include_pdb=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Restore
         run: dotnet restore CaptionGenerator/CaptionGenerator.csproj
 
       - name: Publish
-        # Added -p:TreatWarningsAsErrors=false to prevent the trimming warnings from failing the build if strict mode is on
-        run: dotnet publish CaptionGenerator/CaptionGenerator.csproj -c Release -r ${{ matrix.target }} --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=true -o publish_output
+        run: >
+          dotnet publish CaptionGenerator/CaptionGenerator.csproj
+          -c Release
+          -r ${{ matrix.target }}
+          --self-contained true
+          -p:PublishTrimmed=true
+          -o artifact/CaptionGenerator
 
-      - name: Upload artifacts
+      - name: Remove debug symbols
+        if: steps.config.outputs.include_pdb != 'true'
+        shell: bash
+        run: find artifact/CaptionGenerator -name '*.pdb' -delete
+
+      - name: Remove unnecessary runtime diagnostics
+        shell: bash
+        run: |
+          cd artifact/CaptionGenerator
+
+          # Crash dump creation utility
+          rm -f createdump createdump.exe
+
+          # Debug data access components (post-mortem debugging only)
+          rm -f mscordaccore* libmscordaccore*
+          rm -f mscordbi* libmscordbi*
+
+          # Native PDB symbol reader (Windows only)
+          rm -f Microsoft.DiaSymReader.Native.*.dll
+
+          # ETW (Event Tracing) resource strings (Windows only)
+          rm -f clretwrc.dll
+
+      - name: List artifact contents
+        shell: bash
+        run: |
+          echo "::group::Artifact contents"
+          ls -lh artifact/CaptionGenerator/
+          echo ""
+          echo "Total size: $(du -sh artifact/CaptionGenerator | cut -f1)"
+          echo "File count: $(find artifact/CaptionGenerator -type f | wc -l)"
+          echo "::endgroup::"
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: CaptionGenerator-${{ matrix.target }}
-          path: publish_output/
-          # overwriting is usually disabled by default, ensuring unique names via the matrix fix above is the best solution.
+          path: artifact/
+          compression-level: 9
