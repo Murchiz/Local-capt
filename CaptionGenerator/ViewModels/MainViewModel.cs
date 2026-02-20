@@ -297,7 +297,12 @@ public partial class MainViewModel : ViewModelBase
                         var captionEntryName = string.Create(indexLength + 4, (index, indexLength, format), (span, state) =>
                         {
                             state.index.TryFormat(span[..state.indexLength], out _, state.format);
-                            ".txt".AsSpan().CopyTo(span[state.indexLength..]);
+                            // ⚡ Bolt Optimization: Direct character assignment for the .txt suffix.
+                            // This avoids the overhead of AsSpan() and CopyTo() for a small constant suffix.
+                            span[state.indexLength] = '.';
+                            span[state.indexLength + 1] = 't';
+                            span[state.indexLength + 2] = 'x';
+                            span[state.indexLength + 3] = 't';
                         });
 
                         // Add caption entry
@@ -306,11 +311,11 @@ public partial class MainViewModel : ViewModelBase
                         var captionEntry = archive.CreateEntry(captionEntryName, CompressionLevel.Fastest);
                         using (var entryStream = captionEntry.Open())
                         {
-                            // ⚡ Bolt Optimization: Use ArrayPool to avoid byte[] allocations for every caption.
-                            // This reduces memory pressure and GC overhead during large dataset creation.
+                            // ⚡ Bolt Optimization: Use ArrayPool with GetMaxByteCount to avoid byte[] allocations and eliminate the redundant GetByteCount pass.
+                            // This reduces CPU cycles and GC pressure by performing a single pass over the caption string.
                             var captionSpan = imageCaption.Caption.AsSpan();
-                            int byteCount = System.Text.Encoding.UTF8.GetByteCount(captionSpan);
-                            byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(byteCount);
+                            int maxByteCount = System.Text.Encoding.UTF8.GetMaxByteCount(captionSpan.Length);
+                            byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
                             try
                             {
                                 int written = System.Text.Encoding.UTF8.GetBytes(captionSpan, rentedBuffer);
@@ -364,21 +369,21 @@ public partial class MainViewModel : ViewModelBase
 
     private static string? GetCanonicalExtension(ReadOnlySpan<char> extension)
     {
-        // ⚡ Bolt Optimization: Use canonical extension interning to reduce memory allocations.
-        // This replaces thousands of identical extension strings with single static instances.
-        // It also performs fast, allocation-free validation of allowed image types.
+        // ⚡ Bolt Optimization: Use bitwise character comparisons for extension interning.
+        // This achieves zero-allocation, zero-call case-insensitive validation by avoiding Slice and Equals calls.
+        // Standardizing on static literals eliminates redundant string allocations during discovery.
         if (extension.Length is < 4 or > 5 || extension[0] != '.') return null;
 
         return extension.Length switch
         {
-            4 => extension[1] switch
+            4 => (extension[1] | 0x20) switch
             {
-                'j' or 'J' when extension.Slice(2).Equals("pg", StringComparison.OrdinalIgnoreCase) => ".jpg",
-                'p' or 'P' when extension.Slice(2).Equals("ng", StringComparison.OrdinalIgnoreCase) => ".png",
-                'b' or 'B' when extension.Slice(2).Equals("mp", StringComparison.OrdinalIgnoreCase) => ".bmp",
+                'j' when (extension[2] | 0x20) == 'p' && (extension[3] | 0x20) == 'g' => ".jpg",
+                'p' when (extension[2] | 0x20) == 'n' && (extension[3] | 0x20) == 'g' => ".png",
+                'b' when (extension[2] | 0x20) == 'm' && (extension[3] | 0x20) == 'p' => ".bmp",
                 _ => null
             },
-            5 when extension.Slice(1).Equals("jpeg", StringComparison.OrdinalIgnoreCase) => ".jpeg",
+            5 when (extension[1] | 0x20) == 'j' && (extension[2] | 0x20) == 'p' && (extension[3] | 0x20) == 'e' && (extension[4] | 0x20) == 'g' => ".jpeg",
             _ => null
         };
     }

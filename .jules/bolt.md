@@ -49,3 +49,7 @@
 ## 2025-08-15 - [Collection Materialization and Compression Tuning]
 **Learning:** Iterating over an `ObservableCollection` using an indexer or enumerator in a hot loop (like dataset export) incurs virtual call overhead. Materializing the collection to an array (`.ToArray()`) provides a stable snapshot and faster access. Additionally, for very small text files (captions), `CompressionLevel.Optimal` is CPU-heavy with negligible space benefit compared to `CompressionLevel.Fastest`.
 **Action:** Always materialize UI collections to arrays before batch processing and use `Fastest` compression for small text metadata in archives.
+
+## 2025-10-12 - [Bitwise Character Normalization and Single-Pass Encoding]
+**Learning:** For case-insensitive ASCII character comparisons (like file extensions), bitwise `| 0x20` is significantly faster than `StringComparison.OrdinalIgnoreCase` as it avoids method calls and complex branching. Additionally, using `Encoding.UTF8.GetMaxByteCount` to rent a buffer from `ArrayPool` eliminates the redundant first pass of `GetByteCount`, achieving single-pass string-to-byte conversion and further reducing CPU cycles in high-frequency loops.
+**Action:** Use bitwise normalization for ASCII comparisons in hot paths and prefer `GetMaxByteCount` with `ArrayPool` for single-pass encoding.
