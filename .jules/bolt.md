@@ -49,3 +49,5 @@
 ## 2025-08-15 - [Collection Materialization and Compression Tuning]
 **Learning:** Iterating over an `ObservableCollection` using an indexer or enumerator in a hot loop (like dataset export) incurs virtual call overhead. Materializing the collection to an array (`.ToArray()`) provides a stable snapshot and faster access. Additionally, for very small text files (captions), `CompressionLevel.Optimal` is CPU-heavy with negligible space benefit compared to `CompressionLevel.Fastest`.
 **Action:** Always materialize UI collections to arrays before batch processing and use `Fastest` compression for small text metadata in archives.
+- Performance Pattern: For individual caption saving, use ArrayPool<byte>.Shared and File.WriteAllBytesAsync to minimize allocations and improve I/O efficiency.
+- UI Pattern: In Avalonia, use WrapPanel in ListBox.ItemsPanel for responsive grid layouts. Use Styles with Transitions for smooth hover effects without layout shifts.
