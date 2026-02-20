@@ -93,10 +93,19 @@ public partial class MainViewModel : ViewModelBase
                         var canonicalExtension = GetCanonicalExtension(extension);
                         if (canonicalExtension != null)
                         {
+                            var imagePath = file.Path.LocalPath;
+                            var captionPath = Path.ChangeExtension(imagePath, ".txt");
+                            string caption = "";
+                            if (File.Exists(captionPath))
+                            {
+                                caption = await File.ReadAllTextAsync(captionPath);
+                            }
+
                             files.Add(new ImageCaptionViewModel(new ImageCaption
                             {
-                                ImagePath = file.Path.LocalPath,
-                                Extension = canonicalExtension
+                                ImagePath = imagePath,
+                                Extension = canonicalExtension,
+                                Caption = caption
                             }));
                         }
                     }
@@ -155,7 +164,7 @@ public partial class MainViewModel : ViewModelBase
                     try
                     {
                         var imageData = await File.ReadAllBytesAsync(imageCaption.ImagePath, ct);
-                        imageCaption.Caption = await client.GenerateCaptionAsync(imageData, prompt);
+                        var generatedCaption = await client.GenerateCaptionAsync(imageData, prompt); imageCaption.UpdateCaptionProgrammatically(generatedCaption);
                     }
                     catch (Exception ex)
                     {
@@ -190,7 +199,7 @@ public partial class MainViewModel : ViewModelBase
                     try
                     {
                         var imageData = await File.ReadAllBytesAsync(imageCaption.ImagePath, _cancellationTokenSource.Token);
-                        imageCaption.Caption = await client.GenerateCaptionAsync(imageData, prompt);
+                        var generatedCaption = await client.GenerateCaptionAsync(imageData, prompt); imageCaption.UpdateCaptionProgrammatically(generatedCaption);
                     }
                     catch (Exception ex)
                     {
@@ -321,6 +330,7 @@ public partial class MainViewModel : ViewModelBase
                                 ArrayPool<byte>.Shared.Return(rentedBuffer);
                             }
                         }
+                        imageCaption.MarkAsPersisted();
                     }
                 }
                 catch (Exception ex)
@@ -351,6 +361,7 @@ public partial class MainViewModel : ViewModelBase
                     int written = System.Text.Encoding.UTF8.GetBytes(captionSpan, rentedBuffer);
                     // ⚡ Bolt Optimization: Use File.WriteAllBytesAsync for efficient asynchronous writing of the encoded caption.
                     await File.WriteAllBytesAsync(captionPath, rentedBuffer.AsMemory(0, written), ct);
+                    imageCaption.MarkAsPersisted();
                 }
                 finally
                 {
