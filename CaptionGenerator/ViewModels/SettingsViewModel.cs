@@ -45,7 +45,8 @@ public partial class SettingsViewModel : ViewModelBase
     private async Task LoadSettingsAsync()
     {
         _settings = await _settingsService.LoadSettingsAsync();
-        if (!_settings.PromptTemplates.Any())
+        // ⚡ Bolt Optimization: Use .Count == 0 instead of .Any() to avoid enumerator allocations on a simple collection.
+        if (_settings.PromptTemplates.Count == 0)
         {
             _settings.PromptTemplates.Add(new PromptTemplateSetting
             {

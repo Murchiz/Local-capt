@@ -79,11 +79,12 @@ public partial class MainViewModel : ViewModelBase
 
         if (result is [var folder, ..])
         {
-            // ⚡ Bolt Optimization: Offload folder scanning to a background thread and use Span-based extension checking.
-            // This prevents UI freezes during large folder discovery and reduces per-file allocations.
+            // ⚡ Bolt Optimization: Offload folder scanning to a background thread and use Parallel.ForEachAsync for caption loading.
+            // This prevents UI freezes during large folder discovery and significantly speeds up existing caption loading
+            // by parallelizing I/O operations for matching text files.
             var imageFiles = await Task.Run(async () =>
             {
-                var files = new List<ImageCaptionViewModel>();
+                var storageFiles = new List<(IStorageFile file, string canonicalExtension)>();
                 await foreach (var item in folder.GetItemsAsync())
                 {
                     if (item is IStorageFile file)
@@ -93,24 +94,31 @@ public partial class MainViewModel : ViewModelBase
                         var canonicalExtension = GetCanonicalExtension(extension);
                         if (canonicalExtension != null)
                         {
-                            var imagePath = file.Path.LocalPath;
-                            var captionPath = Path.ChangeExtension(imagePath, ".txt");
-                            string caption = "";
-                            if (File.Exists(captionPath))
-                            {
-                                caption = await File.ReadAllTextAsync(captionPath);
-                            }
-
-                            files.Add(new ImageCaptionViewModel(new ImageCaption
-                            {
-                                ImagePath = imagePath,
-                                Extension = canonicalExtension,
-                                Caption = caption
-                            }));
+                            storageFiles.Add((file, canonicalExtension));
                         }
                     }
                 }
-                return files;
+
+                var results = new ImageCaptionViewModel[storageFiles.Count];
+                await Parallel.ForEachAsync(Enumerable.Range(0, storageFiles.Count), async (i, ct) =>
+                {
+                    var (file, canonicalExtension) = storageFiles[i];
+                    var imagePath = file.Path.LocalPath;
+                    var captionPath = Path.ChangeExtension(imagePath, ".txt");
+                    string caption = "";
+                    if (File.Exists(captionPath))
+                    {
+                        caption = await File.ReadAllTextAsync(captionPath, ct);
+                    }
+
+                    results[i] = new ImageCaptionViewModel(new ImageCaption
+                    {
+                        ImagePath = imagePath,
+                        Extension = canonicalExtension,
+                        Caption = caption
+                    });
+                });
+                return results;
             });
             ImageCaptions = new ObservableCollection<ImageCaptionViewModel>(imageFiles);
         }
@@ -306,7 +314,12 @@ public partial class MainViewModel : ViewModelBase
                         var captionEntryName = string.Create(indexLength + 4, (index, indexLength, format), (span, state) =>
                         {
                             state.index.TryFormat(span[..state.indexLength], out _, state.format);
-                            ".txt".AsSpan().CopyTo(span[state.indexLength..]);
+                            // ⚡ Bolt Optimization: Use direct character assignment for small constant suffixes instead of .AsSpan().CopyTo().
+                            // This avoids span slicing and copy overhead in high-frequency archival loops.
+                            span[state.indexLength] = '.';
+                            span[state.indexLength + 1] = 't';
+                            span[state.indexLength + 2] = 'x';
+                            span[state.indexLength + 3] = 't';
                         });
 
                         // Add caption entry
@@ -375,23 +388,33 @@ public partial class MainViewModel : ViewModelBase
 
     private static string? GetCanonicalExtension(ReadOnlySpan<char> extension)
     {
-        // ⚡ Bolt Optimization: Use canonical extension interning to reduce memory allocations.
-        // This replaces thousands of identical extension strings with single static instances.
-        // It also performs fast, allocation-free validation of allowed image types.
+        // ⚡ Bolt Optimization: Use bitwise OR 0x20 for zero-allocation ASCII case-insensitive comparison.
+        // This avoids StringComparison.OrdinalIgnoreCase and multiple Span.Equals calls.
+        // It also replaces thousands of identical extension strings with single static instances.
         if (extension.Length is < 4 or > 5 || extension[0] != '.') return null;
 
-        return extension.Length switch
+        if (extension.Length == 4)
         {
-            4 => extension[1] switch
-            {
-                'j' or 'J' when extension.Slice(2).Equals("pg", StringComparison.OrdinalIgnoreCase) => ".jpg",
-                'p' or 'P' when extension.Slice(2).Equals("ng", StringComparison.OrdinalIgnoreCase) => ".png",
-                'b' or 'B' when extension.Slice(2).Equals("mp", StringComparison.OrdinalIgnoreCase) => ".bmp",
-                _ => null
-            },
-            5 when extension.Slice(1).Equals("jpeg", StringComparison.OrdinalIgnoreCase) => ".jpeg",
-            _ => null
-        };
+            // Normalize to lowercase using bitwise OR 0x20 (works for ASCII letters)
+            char c1 = (char)(extension[1] | 0x20);
+            char c2 = (char)(extension[2] | 0x20);
+            char c3 = (char)(extension[3] | 0x20);
+
+            if (c1 == 'j' && c2 == 'p' && c3 == 'g') return ".jpg";
+            if (c1 == 'p' && c2 == 'n' && c3 == 'g') return ".png";
+            if (c1 == 'b' && c2 == 'm' && c3 == 'p') return ".bmp";
+        }
+        else if (extension.Length == 5)
+        {
+            char c1 = (char)(extension[1] | 0x20);
+            char c2 = (char)(extension[2] | 0x20);
+            char c3 = (char)(extension[3] | 0x20);
+            char c4 = (char)(extension[4] | 0x20);
+
+            if (c1 == 'j' && c2 == 'p' && c3 == 'e' && c4 == 'g') return ".jpeg";
+        }
+
+        return null;
     }
 
     [RelayCommand]
