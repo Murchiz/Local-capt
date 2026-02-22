@@ -329,10 +329,11 @@ public partial class MainViewModel : ViewModelBase
                         using (var entryStream = captionEntry.Open())
                         {
                             // ⚡ Bolt Optimization: Use ArrayPool to avoid byte[] allocations for every caption.
-                            // This reduces memory pressure and GC overhead during large dataset creation.
+                            // Combined with GetMaxByteCount, this achieves zero-allocation encoding and avoids an extra pass over the string.
+                            // This reduces memory pressure and CPU overhead during large dataset creation.
                             var captionSpan = imageCaption.Caption.AsSpan();
-                            int byteCount = System.Text.Encoding.UTF8.GetByteCount(captionSpan);
-                            byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(byteCount);
+                            int maxByteCount = System.Text.Encoding.UTF8.GetMaxByteCount(captionSpan.Length);
+                            byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
                             try
                             {
                                 int written = System.Text.Encoding.UTF8.GetBytes(captionSpan, rentedBuffer);
@@ -388,33 +389,17 @@ public partial class MainViewModel : ViewModelBase
 
     private static string? GetCanonicalExtension(ReadOnlySpan<char> extension)
     {
-        // ⚡ Bolt Optimization: Use bitwise OR 0x20 for zero-allocation ASCII case-insensitive comparison.
-        // This avoids StringComparison.OrdinalIgnoreCase and multiple Span.Equals calls.
-        // It also replaces thousands of identical extension strings with single static instances.
-        if (extension.Length is < 4 or > 5 || extension[0] != '.') return null;
-
-        if (extension.Length == 4)
+        // ⚡ Bolt Optimization: Use C# 11 list pattern matching on ReadOnlySpan<char> for zero-allocation extension filtering.
+        // This replaces manual bitwise normalization and multiple 'if' statements with a highly optimized jump table or decision tree,
+        // improving readability and performance during large folder discovery.
+        return extension switch
         {
-            // Normalize to lowercase using bitwise OR 0x20 (works for ASCII letters)
-            char c1 = (char)(extension[1] | 0x20);
-            char c2 = (char)(extension[2] | 0x20);
-            char c3 = (char)(extension[3] | 0x20);
-
-            if (c1 == 'j' && c2 == 'p' && c3 == 'g') return ".jpg";
-            if (c1 == 'p' && c2 == 'n' && c3 == 'g') return ".png";
-            if (c1 == 'b' && c2 == 'm' && c3 == 'p') return ".bmp";
-        }
-        else if (extension.Length == 5)
-        {
-            char c1 = (char)(extension[1] | 0x20);
-            char c2 = (char)(extension[2] | 0x20);
-            char c3 = (char)(extension[3] | 0x20);
-            char c4 = (char)(extension[4] | 0x20);
-
-            if (c1 == 'j' && c2 == 'p' && c3 == 'e' && c4 == 'g') return ".jpeg";
-        }
-
-        return null;
+            ['.', 'j' or 'J', 'p' or 'P', 'g' or 'G'] => ".jpg",
+            ['.', 'p' or 'P', 'n' or 'N', 'g' or 'G'] => ".png",
+            ['.', 'b' or 'B', 'm' or 'M', 'p' or 'P'] => ".bmp",
+            ['.', 'j' or 'J', 'p' or 'P', 'e' or 'E', 'g' or 'G'] => ".jpeg",
+            _ => null
+        };
     }
 
     [RelayCommand]
