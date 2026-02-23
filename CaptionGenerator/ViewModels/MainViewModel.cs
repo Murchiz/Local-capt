@@ -100,7 +100,16 @@ public partial class MainViewModel : ViewModelBase
                 }
 
                 var results = new ImageCaptionViewModel[storageFiles.Count];
-                await Parallel.ForEachAsync(Enumerable.Range(0, storageFiles.Count), async (i, ct) =>
+                // ⚡ Bolt Optimization: Use a higher MaxDegreeOfParallelism for I/O bound tasks like loading many small text files.
+                // This saturates SSD I/O and significantly reduces wait time for large folders with existing captions.
+                var parallelOptions = new ParallelOptions
+                {
+                    // ⚡ Bolt Optimization: Scale concurrency based on hardware but ensure a minimum of 16
+                    // to effectively saturate I/O on modern SSDs during folder discovery.
+                    MaxDegreeOfParallelism = Math.Max(Environment.ProcessorCount, 16),
+                    CancellationToken = CancellationToken.None // We don't have a CTS here yet
+                };
+                await Parallel.ForEachAsync(Enumerable.Range(0, storageFiles.Count), parallelOptions, async (i, ct) =>
                 {
                     var (file, canonicalExtension) = storageFiles[i];
                     var imagePath = file.Path.LocalPath;
@@ -360,7 +369,9 @@ public partial class MainViewModel : ViewModelBase
         {
             // ⚡ Bolt Optimization: Parallelize saving individual text files to improve I/O throughput.
             // On modern SSDs and network storage, this significantly reduces the time to save large sets of captions.
-            await Parallel.ForEachAsync(imageCaptions, async (imageCaption, ct) =>
+            // Scaling concurrency based on hardware (minimum 16) ensures optimal throughput for many small I/O operations.
+            var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(Environment.ProcessorCount, 16) };
+            await Parallel.ForEachAsync(imageCaptions, parallelOptions, async (imageCaption, ct) =>
             {
                 var captionPath = Path.ChangeExtension(imageCaption.ImagePath, ".txt");
 

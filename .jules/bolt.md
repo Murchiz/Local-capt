@@ -51,3 +51,7 @@
 **Action:** Always materialize UI collections to arrays before batch processing and use `Fastest` compression for small text metadata in archives.
 - Performance Pattern: For individual caption saving, use ArrayPool<byte>.Shared and File.WriteAllBytesAsync to minimize allocations and improve I/O efficiency.
 - UI Pattern: In Avalonia, use WrapPanel in ListBox.ItemsPanel for responsive grid layouts. Use Styles with Transitions for smooth hover effects without layout shifts.
+
+## 2026-02-23 - [I/O Parallelism Scaling for Small Files]
+**Learning:** For I/O-bound tasks involving thousands of small files (like loading or saving captions), the default `MaxDegreeOfParallelism` (which defaults to `Environment.ProcessorCount`) often fails to saturate the I/O throughput of modern NVMe SSDs or high-speed network storage.
+**Action:** Use `Math.Max(Environment.ProcessorCount, 16)` for `Parallel.ForEachAsync` in I/O-bound paths to improve throughput without significantly increasing CPU overhead.
