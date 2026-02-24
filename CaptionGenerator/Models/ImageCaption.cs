@@ -5,4 +5,5 @@ public class ImageCaption
     public string ImagePath { get; set; } = string.Empty;
     public string Caption { get; set; } = string.Empty;
     public string Extension { get; set; } = string.Empty;
+    public string CaptionPath { get; set; } = string.Empty;
 }

@@ -49,6 +49,12 @@ public partial class ImageCaptionViewModel : ObservableObject
         set => SetProperty(_imageCaption.Extension, value, _imageCaption, (c, v) => c.Extension = v);
     }
 
+    public string CaptionPath
+    {
+        get => _imageCaption.CaptionPath;
+        set => SetProperty(_imageCaption.CaptionPath, value, _imageCaption, (c, v) => c.CaptionPath = v);
+    }
+
     /// <summary>
     /// Updates the caption from an external source (e.g. AI generation or initial load)
     /// without marking it as modified by the user.
@@ -74,7 +80,8 @@ public partial class ImageCaptionViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveCaptionAsync()
     {
-        var captionPath = Path.ChangeExtension(ImagePath, ".txt");
+        // ⚡ Bolt Optimization: Use the cached CaptionPath to avoid redundant Path.ChangeExtension allocations.
+        var captionPath = CaptionPath;
 
         // ⚡ Bolt Optimization: Use ArrayPool to avoid byte[] allocations for individual caption saving.
         var captionSpan = Caption.AsSpan();
