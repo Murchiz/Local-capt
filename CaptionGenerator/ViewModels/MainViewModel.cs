@@ -113,6 +113,8 @@ public partial class MainViewModel : ViewModelBase
                 {
                     var (file, canonicalExtension) = storageFiles[i];
                     var imagePath = file.Path.LocalPath;
+                    // ⚡ Bolt Optimization: Cache the caption path once during discovery to avoid redundant Path.ChangeExtension calls
+                    // and associated string allocations in discovery, individual save, and batch save operations.
                     var captionPath = Path.ChangeExtension(imagePath, ".txt");
                     string caption = "";
                     if (File.Exists(captionPath))
@@ -124,7 +126,8 @@ public partial class MainViewModel : ViewModelBase
                     {
                         ImagePath = imagePath,
                         Extension = canonicalExtension,
-                        Caption = caption
+                        Caption = caption,
+                        CaptionPath = captionPath
                     });
                 });
                 return results;
@@ -373,7 +376,8 @@ public partial class MainViewModel : ViewModelBase
             var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(Environment.ProcessorCount, 16) };
             await Parallel.ForEachAsync(imageCaptions, parallelOptions, async (imageCaption, ct) =>
             {
-                var captionPath = Path.ChangeExtension(imageCaption.ImagePath, ".txt");
+                // ⚡ Bolt Optimization: Use the cached CaptionPath to avoid redundant Path.ChangeExtension allocations.
+                var captionPath = imageCaption.CaptionPath;
 
                 // ⚡ Bolt Optimization: Use ArrayPool to avoid byte[] allocations for every caption.
                 // This reduces memory pressure and GC overhead during large export operations.

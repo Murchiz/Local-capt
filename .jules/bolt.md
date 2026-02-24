@@ -55,3 +55,7 @@
 ## 2026-02-23 - [I/O Parallelism Scaling for Small Files]
 **Learning:** For I/O-bound tasks involving thousands of small files (like loading or saving captions), the default `MaxDegreeOfParallelism` (which defaults to `Environment.ProcessorCount`) often fails to saturate the I/O throughput of modern NVMe SSDs or high-speed network storage.
 **Action:** Use `Math.Max(Environment.ProcessorCount, 16)` for `Parallel.ForEachAsync` in I/O-bound paths to improve throughput without significantly increasing CPU overhead.
+
+## 2025-05-22 - [Caption Path Caching Optimization]
+**Learning:** Derived file paths (like changing an image extension to .txt for captions) that are used across multiple application phases (discovery, individual save, batch save) should be calculated once and cached in the Model. Repeated calls to `Path.ChangeExtension` in high-frequency loops or across different ViewModels incur redundant string allocations and CPU cycles.
+**Action:** Cache derived metadata like caption file paths during the initial data discovery phase to minimize allocations during subsequent I/O operations.
