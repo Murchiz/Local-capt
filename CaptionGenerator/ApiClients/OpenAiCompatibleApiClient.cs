@@ -78,13 +78,24 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
     {
         // ⚡ Bolt Optimization: Zero-allocation file signature detection using 32-bit signature checks.
         // This performs a single 32-bit comparison instead of multiple 8-bit checks, reducing CPU cycles.
-        if (data.Length >= 4)
+        if (data.Length >= 12)
         {
             uint header = BinaryPrimitives.ReadUInt32BigEndian(data);
+            if ((header & 0xFFFFFF00) == 0xFFD8FF00) return "image/jpeg"; // JPEG
             if (header == 0x89504E47) return "image/png"; // PNG
+
+            // WebP: RIFF (bytes 0-3) and WEBP (bytes 8-11)
+            if (header == 0x52494646 && BinaryPrimitives.ReadUInt32BigEndian(data[8..]) == 0x57454250)
+                return "image/webp";
+
             if (header == 0x47494638) return "image/gif"; // GIF8
-            // ⚡ Bolt Optimization: Use 32-bit signature check with mask for JPEG to reduce branch instructions for the most common format.
+        }
+        else if (data.Length >= 4)
+        {
+            uint header = BinaryPrimitives.ReadUInt32BigEndian(data);
             if ((header & 0xFFFFFF00) == 0xFFD8FF00) return "image/jpeg";
+            if (header == 0x89504E47) return "image/png";
+            if (header == 0x47494638) return "image/gif";
         }
 
         if (data.Length >= 3)
