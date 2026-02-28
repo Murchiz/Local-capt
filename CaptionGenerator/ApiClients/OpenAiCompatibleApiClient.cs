@@ -76,39 +76,28 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
 
     private static string GetMimeType(ReadOnlySpan<byte> data)
     {
-        // ⚡ Bolt Optimization: Zero-allocation file signature detection using 32-bit signature checks.
-        // This performs a single 32-bit comparison instead of multiple 8-bit checks, reducing CPU cycles.
-        if (data.Length >= 12)
+        // ⚡ Bolt Optimization: Optimized file signature detection using a single 32-bit read and pattern matching.
+        // This reduces branching and improves performance during high-frequency image format detection.
+        if (data.Length >= 4)
         {
             uint header = BinaryPrimitives.ReadUInt32BigEndian(data);
-            if ((header & 0xFFFFFF00) == 0xFFD8FF00) return "image/jpeg"; // JPEG
-            if (header == 0x89504E47) return "image/png"; // PNG
 
-            // WebP: RIFF (bytes 0-3) and WEBP (bytes 8-11)
-            if (header == 0x52494646 && BinaryPrimitives.ReadUInt32BigEndian(data[8..]) == 0x57454250)
-                return "image/webp";
-
-            if (header == 0x47494638) return "image/gif"; // GIF8
-        }
-        else if (data.Length >= 4)
-        {
-            uint header = BinaryPrimitives.ReadUInt32BigEndian(data);
-            if ((header & 0xFFFFFF00) == 0xFFD8FF00) return "image/jpeg";
+            // Match PNG (\x89PNG)
             if (header == 0x89504E47) return "image/png";
+
+            // Match JPEG (FF D8 FF XX)
+            if ((header & 0xFFFFFF00) == 0xFFD8FF00) return "image/jpeg";
+
+            // Match GIF (GIF8)
             if (header == 0x47494638) return "image/gif";
+
+            // Match WebP (RIFF .... WEBP)
+            if (header == 0x52494646 && data.Length >= 12 && BinaryPrimitives.ReadUInt32BigEndian(data[8..]) == 0x57454250)
+                return "image/webp";
         }
 
-        if (data.Length >= 3)
-        {
-            // JPEG: FF D8 FF (fallback for very small buffers)
-            if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) return "image/jpeg";
-        }
-
-        if (data.Length >= 2)
-        {
-            // BMP: 42 4D
-            if (data[0] == 0x42 && data[1] == 0x4D) return "image/bmp";
-        }
+        // Fallback for BMP (BM) or very small buffers
+        if (data.Length >= 2 && data[0] == 0x42 && data[1] == 0x4D) return "image/bmp";
 
         return "image/jpeg"; // Default to JPEG
     }
