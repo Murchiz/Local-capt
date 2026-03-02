@@ -185,7 +185,11 @@ public partial class MainViewModel : ViewModelBase
                     try
                     {
                         var imageData = await File.ReadAllBytesAsync(imageCaption.ImagePath, ct);
-                        var generatedCaption = await client.GenerateCaptionAsync(imageData, prompt); imageCaption.UpdateCaptionProgrammatically(generatedCaption);
+                        var generatedCaption = await client.GenerateCaptionAsync(imageData, prompt);
+                        // ⚡ Bolt Optimization: Use the public property setter to ensure that AI-generated captions
+                        // are correctly flagged as modified relative to the original disk baseline.
+                        // This allows them to be included in bulk save operations.
+                        imageCaption.Caption = generatedCaption;
                     }
                     catch (Exception ex)
                     {
@@ -220,7 +224,11 @@ public partial class MainViewModel : ViewModelBase
                     try
                     {
                         var imageData = await File.ReadAllBytesAsync(imageCaption.ImagePath, _cancellationTokenSource.Token);
-                        var generatedCaption = await client.GenerateCaptionAsync(imageData, prompt); imageCaption.UpdateCaptionProgrammatically(generatedCaption);
+                        var generatedCaption = await client.GenerateCaptionAsync(imageData, prompt);
+                        // ⚡ Bolt Optimization: Use the public property setter to ensure that AI-generated captions
+                        // are correctly flagged as modified relative to the original disk baseline.
+                        // This allows them to be included in bulk save operations.
+                        imageCaption.Caption = generatedCaption;
                     }
                     catch (Exception ex)
                     {
@@ -371,11 +379,20 @@ public partial class MainViewModel : ViewModelBase
         }
         else
         {
+            // ⚡ Bolt Optimization: Filter the collection to only include modified items.
+            // This eliminates redundant disk I/O for unchanged captions, making saving nearly instantaneous for large datasets.
+            var modifiedCaptions = imageCaptions.Where(ic => ic.IsModified).ToArray();
+            if (modifiedCaptions.Length == 0)
+            {
+                IsSaving = false;
+                return;
+            }
+
             // ⚡ Bolt Optimization: Parallelize saving individual text files to improve I/O throughput.
             // On modern SSDs and network storage, this significantly reduces the time to save large sets of captions.
             // Scaling concurrency based on hardware (minimum 16) ensures optimal throughput for many small I/O operations.
             var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(Environment.ProcessorCount, 16) };
-            await Parallel.ForEachAsync(imageCaptions, parallelOptions, async (imageCaption, ct) =>
+            await Parallel.ForEachAsync(modifiedCaptions, parallelOptions, async (imageCaption, ct) =>
             {
                 // ⚡ Bolt Optimization: Use the cached CaptionPath to avoid redundant Path.ChangeExtension allocations.
                 var captionPath = imageCaption.CaptionPath;
