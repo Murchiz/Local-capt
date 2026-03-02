@@ -56,7 +56,7 @@ public partial class ImageCaptionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Updates the caption from an external source (e.g. AI generation or initial load)
+    /// Updates the caption from an external source (e.g. initial load)
     /// without marking it as modified by the user.
     /// </summary>
     public void UpdateCaptionProgrammatically(string newCaption)
