@@ -29,6 +29,7 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
     private const string PngPrefix = "data:image/png;base64,";
     private const string GifPrefix = "data:image/gif;base64,";
     private const string BmpPrefix = "data:image/bmp;base64,";
+    private const string WebpPrefix = "data:image/webp;base64,";
 
     public OpenAiCompatibleApiClient(string baseUrl, string model)
     {
@@ -77,28 +78,29 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
     private static string GetMimeType(ReadOnlySpan<byte> data)
     {
         // ⚡ Bolt Optimization: Optimized file signature detection using a single 32-bit read and pattern matching.
-        // This reduces branching and improves performance during high-frequency image format detection.
+        // Using a switch expression allows the compiler to generate a more efficient jump table for exact matches,
+        // reducing branching and improving performance during high-frequency image format detection.
         if (data.Length >= 4)
         {
             uint header = BinaryPrimitives.ReadUInt32BigEndian(data);
 
-            // Match PNG (\x89PNG)
-            if (header == 0x89504E47) return "image/png";
-
-            // Match JPEG (FF D8 FF XX)
-            if ((header & 0xFFFFFF00) == 0xFFD8FF00) return "image/jpeg";
-
-            // Match GIF (GIF8)
-            if (header == 0x47494638) return "image/gif";
-
-            // Match WebP (RIFF .... WEBP)
-            if (header == 0x52494646 && data.Length >= 12 && BinaryPrimitives.ReadUInt32BigEndian(data[8..]) == 0x57454250)
-                return "image/webp";
+            return header switch
+            {
+                0x89504E47 => "image/png", // Match PNG (\x89PNG)
+                0x47494638 => "image/gif", // Match GIF (GIF8)
+                0x52494646 when data.Length >= 12 && BinaryPrimitives.ReadUInt32BigEndian(data[8..]) == 0x57454250 => "image/webp", // Match WebP (RIFF .... WEBP)
+                _ when (header & 0xFFFFFF00) == 0xFFD8FF00 => "image/jpeg", // Match JPEG (FF D8 FF XX)
+                _ => GetFallbackMimeType(data)
+            };
         }
 
+        return GetFallbackMimeType(data);
+    }
+
+    private static string GetFallbackMimeType(ReadOnlySpan<byte> data)
+    {
         // Fallback for BMP (BM) or very small buffers
         if (data.Length >= 2 && data[0] == 0x42 && data[1] == 0x4D) return "image/bmp";
-
         return "image/jpeg"; // Default to JPEG
     }
 
@@ -111,6 +113,7 @@ public class OpenAiCompatibleApiClient : IVisionLanguageModelClient
             "image/png" => PngPrefix,
             "image/gif" => GifPrefix,
             "image/bmp" => BmpPrefix,
+            "image/webp" => WebpPrefix,
             _ => $"data:{mimeType};base64,"
         };
 
