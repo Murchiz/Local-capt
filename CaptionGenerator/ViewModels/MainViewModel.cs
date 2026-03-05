@@ -87,16 +87,55 @@ public partial class MainViewModel : ViewModelBase
                 // ⚡ Bolt Optimization: Cache the LocalPath during discovery to avoid redundant property access on IStorageFile
                 // which might involve Uri parsing or platform-specific IPC inside the parallel loop.
                 var storageFiles = new List<(string imagePath, string canonicalExtension)>();
-                await foreach (var item in folder.GetItemsAsync())
+                // ⚡ Bolt Optimization: Use a HashSet to track existing captions in a single pass.
+                // This eliminates the need for File.Exists() syscalls in the parallel loop, which is significantly
+                // faster for large datasets and network shares.
+                var existingCaptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                var localPath = folder.Path.LocalPath;
+                if (!string.IsNullOrEmpty(localPath))
                 {
-                    if (item is IStorageFile file)
+                    // ⚡ Bolt Optimization: Use Directory.EnumerateFiles for faster I/O on local drives.
+                    // This avoids the overhead of creating IStorageFile wrappers for every file in the folder.
+                    foreach (var filePath in Directory.EnumerateFiles(localPath))
                     {
-                        var fileName = file.Name.AsSpan();
+                        var fileName = Path.GetFileName(filePath).AsSpan();
                         var extension = Path.GetExtension(fileName);
+
+                        if (extension is ['.', 't' or 'T', 'x' or 'X', 't' or 'T'])
+                        {
+                            existingCaptions.Add(filePath);
+                            continue;
+                        }
+
                         var canonicalExtension = GetCanonicalExtension(extension);
                         if (canonicalExtension != null)
                         {
-                            storageFiles.Add((file.Path.LocalPath, canonicalExtension));
+                            storageFiles.Add((filePath, canonicalExtension));
+                        }
+                    }
+                }
+                else
+                {
+                    // Fallback for cloud/virtual storage where LocalPath is not available
+                    await foreach (var item in folder.GetItemsAsync())
+                    {
+                        if (item is IStorageFile file)
+                        {
+                            var fileName = file.Name.AsSpan();
+                            var extension = Path.GetExtension(fileName);
+
+                            if (extension is ['.', 't' or 'T', 'x' or 'X', 't' or 'T'])
+                            {
+                                existingCaptions.Add(file.Path.LocalPath);
+                                continue;
+                            }
+
+                            var canonicalExtension = GetCanonicalExtension(extension);
+                            if (canonicalExtension != null)
+                            {
+                                storageFiles.Add((file.Path.LocalPath, canonicalExtension));
+                            }
                         }
                     }
                 }
@@ -118,7 +157,9 @@ public partial class MainViewModel : ViewModelBase
                     // and associated string allocations in discovery, individual save, and batch save operations.
                     var captionPath = Path.ChangeExtension(imagePath, ".txt");
                     string caption = "";
-                    if (File.Exists(captionPath))
+                    // ⚡ Bolt Optimization: Use the HashSet for zero-allocation existence check instead of File.Exists syscall.
+                    // This eliminates thousands of costly I/O operations, especially on high-latency network storage.
+                    if (existingCaptions.Contains(captionPath))
                     {
                         caption = await File.ReadAllTextAsync(captionPath, ct);
                     }
