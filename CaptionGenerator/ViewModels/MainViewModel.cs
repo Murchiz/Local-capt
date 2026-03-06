@@ -86,20 +86,26 @@ public partial class MainViewModel : ViewModelBase
             {
                 // ⚡ Bolt Optimization: Cache the LocalPath during discovery to avoid redundant property access on IStorageFile
                 // which might involve Uri parsing or platform-specific IPC inside the parallel loop.
-                var storageFiles = new List<(string imagePath, string canonicalExtension)>();
-                // ⚡ Bolt Optimization: Use a HashSet to track existing captions in a single pass.
-                // This eliminates the need for File.Exists() syscalls in the parallel loop, which is significantly
-                // faster for large datasets and network shares.
-                var existingCaptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                List<(string imagePath, string canonicalExtension)> storageFiles;
+                HashSet<string> existingCaptions;
 
                 var localPath = folder.Path.LocalPath;
                 if (!string.IsNullOrEmpty(localPath))
                 {
-                    // ⚡ Bolt Optimization: Use Directory.EnumerateFiles for faster I/O on local drives.
+                    // ⚡ Bolt Optimization: Use Directory.GetFiles to get an initial count for pre-allocating collections.
+                    // This avoids multiple internal array re-allocations as the dataset is discovered.
+                    var allFiles = Directory.GetFiles(localPath);
+                    storageFiles = new List<(string imagePath, string canonicalExtension)>(allFiles.Length);
+                    existingCaptions = new HashSet<string>(allFiles.Length, StringComparer.OrdinalIgnoreCase);
+
+                    // ⚡ Bolt Optimization: Use Directory.GetFiles for faster I/O on local drives.
                     // This avoids the overhead of creating IStorageFile wrappers for every file in the folder.
-                    foreach (var filePath in Directory.EnumerateFiles(localPath))
+                    foreach (var filePath in allFiles)
                     {
-                        var fileName = Path.GetFileName(filePath).AsSpan();
+                        // ⚡ Bolt Optimization: Use filePath.AsSpan() and span-based Path methods to extract
+                        // filename and extension without creating temporary string objects.
+                        var filePathSpan = filePath.AsSpan();
+                        var fileName = Path.GetFileName(filePathSpan);
                         var extension = Path.GetExtension(fileName);
 
                         if (extension is ['.', 't' or 'T', 'x' or 'X', 't' or 'T'])
@@ -117,24 +123,29 @@ public partial class MainViewModel : ViewModelBase
                 }
                 else
                 {
+                    storageFiles = new List<(string imagePath, string canonicalExtension)>();
+                    existingCaptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                     // Fallback for cloud/virtual storage where LocalPath is not available
                     await foreach (var item in folder.GetItemsAsync())
                     {
                         if (item is IStorageFile file)
                         {
+                            // ⚡ Bolt Optimization: Cache LocalPath to avoid redundant property access and URI parsing.
+                            var itemLocalPath = file.Path.LocalPath;
                             var fileName = file.Name.AsSpan();
                             var extension = Path.GetExtension(fileName);
 
                             if (extension is ['.', 't' or 'T', 'x' or 'X', 't' or 'T'])
                             {
-                                existingCaptions.Add(file.Path.LocalPath);
+                                existingCaptions.Add(itemLocalPath);
                                 continue;
                             }
 
                             var canonicalExtension = GetCanonicalExtension(extension);
                             if (canonicalExtension != null)
                             {
-                                storageFiles.Add((file.Path.LocalPath, canonicalExtension));
+                                storageFiles.Add((itemLocalPath, canonicalExtension));
                             }
                         }
                     }
