@@ -54,7 +54,11 @@
         </ItemsPanelTemplate>
       </ListBox.ItemsPanel>
       <ListBox.ItemTemplate>
-        <DataTemplate>
+        <!-- ⚡ Bolt Optimization: Use compiled bindings by specifying x:DataType.
+             This allows the compiler to resolve property paths at compile-time,
+             bypassing reflection at runtime and significantly improving performance
+             during list rendering and scrolling. -->
+        <DataTemplate x:DataType="vm:ImageCaptionViewModel">
           <Border BorderThickness="2" CornerRadius="5" Padding="5" Margin="5"
                   BorderBrush="{Binding IsProcessing, Converter={StaticResource BoolToBrushConverter}}"
                   Background="Transparent" Classes="captionItem">
